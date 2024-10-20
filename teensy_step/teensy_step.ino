@@ -19,7 +19,6 @@ const byte PIN_HOME = 14;
 const byte PIN_LIM2 = 15;
 const byte PIN_LIM1 = 16;
 
-// TODO: Store this in eprom memory, maybe?
 Settings_union settings = {
     0b1111,  // run current (inverse, 1111 is min)
     0b1111,  // sleep current
@@ -47,9 +46,9 @@ void setup() {
 }
 
 void reset_controller() {
+    // Limits:init();
     motor.init();
     motor.update_settings();
-    // Limits:init();
 }
 
 void motor_goto(byte data[]) {
@@ -58,16 +57,12 @@ void motor_goto(byte data[]) {
     Comms.send(REPLY_ACK, long_union.bytes, sizeof(long_union.bytes));
 }
 
-void motor_home() {
-    Comms.send(REPLY_ACK);
-    // run homing procedure
-    // reply done
-    Comms.send(REPLY_DONE);
-}
-
 void motor_home(byte data[]) {
     byte direction = data[1];
     Comms.send(REPLY_ACK, direction);
+    // run homing procedure
+    // reply done
+    Comms.send(REPLY_DONE);
 }
 
 void motor_stop() {

@@ -3,13 +3,13 @@
 
 // constructor
 Motor::Motor(byte pin_cs, byte pin_step, byte pin_dir, Settings_union &settings)
-    : stepper{AccelStepper::DRIVER, pin_step, pin_dir}, sd{}
+    : stepper{AccelStepper::DRIVER, pin_step, pin_dir, &settings}, sd{}
  {
     // init
     this->pin_cs = pin_cs;
     this->pin_step = pin_step;
     this->pin_dir = pin_dir;
-    this->settings = settings;
+    this->settings = &settings;
 }
 
 void Motor::init() {
@@ -33,7 +33,7 @@ void Motor::init() {
 }
 
 void Motor::update_settings() {
-    stepper.setMaxSpeed(100 * settings.data.top_speed);
+    stepper.setMaxSpeed(100 * settings->data.top_speed);
     stepper.setAcceleration(20000);
     // update driver
 }

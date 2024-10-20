@@ -161,7 +161,7 @@ if __name__ == "__main__":
     # status = mc.query(Query.FAULTS)
 
     status = mc.set_parameters(
-        Settings(11, 15, 7, 100, 1, 255, False, False, False, False, True, True)
+        Settings(11, 15, 7, 100, 100, 255, False, False, False, False, True, True)
     )
     print("Reply: ", status)
 

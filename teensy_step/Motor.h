@@ -12,7 +12,7 @@ class Motor {
     uint8_t pin_cs;
     uint8_t pin_step;
     uint8_t pin_dir;
-    Settings_union settings;
+    Settings_union* settings;
     Motor(byte pin_cs, byte pin_step, byte pin_dir, Settings_union &settings);
     void goto_pos(long steps);
     void init();
