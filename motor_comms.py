@@ -161,13 +161,13 @@ if __name__ == "__main__":
     # status = mc.query(Query.FAULTS)
 
     status = mc.set_parameters(
-        Settings(11, 15, 7, 100, 100, 255, False, False, False, False, True, True)
+        Settings(11, 15, 7, 100, 4000, 40000, False, False, False, False, True, True)
     )
     print("Reply: ", status)
 
     status = mc.get_parameters()
     print("Reply: ", status)
 
-    status = mc.goto(1700)
+    status = mc.goto(1600)
     print("Reply: ", status)
     mc.close()

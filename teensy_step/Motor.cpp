@@ -2,14 +2,15 @@
 #include "Settings.h"
 
 // constructor
-Motor::Motor(byte pin_cs, byte pin_step, byte pin_dir, Settings_union &settings)
-    : stepper{AccelStepper::DRIVER, pin_step, pin_dir, &settings}, sd{}
+Motor::Motor(byte _pin_cs, byte _pin_step, byte _pin_dir, Settings_union &_settings)
+    // init children
+    : stepper{AccelStepper::DRIVER, _pin_step, _pin_dir}, sd{}
  {
     // init
-    this->pin_cs = pin_cs;
-    this->pin_step = pin_step;
-    this->pin_dir = pin_dir;
-    this->settings = &settings;
+    pin_cs = _pin_cs;
+    pin_step = _pin_step;
+    pin_dir = _pin_dir;
+    settings = &_settings;
 }
 
 void Motor::init() {
@@ -33,8 +34,8 @@ void Motor::init() {
 }
 
 void Motor::update_settings() {
-    stepper.setMaxSpeed(100 * settings->data.top_speed);
-    stepper.setAcceleration(20000);
+    stepper.setMaxSpeed(settings->data.top_speed);
+    stepper.setAcceleration(settings->data.acceleration);
     // update driver
 }
 
