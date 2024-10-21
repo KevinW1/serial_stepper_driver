@@ -1,7 +1,6 @@
 #include "Comms.h"
 #include "Settings.h"
 #include "Motor.h"
-#include <EEPROM.h>
 
 // pin definitions
 // Motor
@@ -67,7 +66,8 @@ void motor_home(byte data[]) {
 
 void motor_stop() {
     motor.stop();
-    Comms.send(REPLY_ACK);
+    long_union.value = motor.position();
+    Comms.send(REPLY_ACK, long_union.bytes, sizeof(long_union.bytes));
 }
 
 void controller_update(byte data[], size_t length) {
@@ -124,5 +124,5 @@ void loop() {
         Comms.new_data = false;
     }
     motor.run();
-    // limits.check();
+    // limits.run();
 }

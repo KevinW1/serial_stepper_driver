@@ -1,5 +1,5 @@
-#ifndef SETTINGS_h
-#define SETTINGS_h
+#ifndef Settings_h
+#define Settings_h
 
 struct __attribute__((packed)) Settings_struct {
     //motor

@@ -1,3 +1,4 @@
+import struct
 import time
 from collections.abc import Mapping
 from enum import Enum
@@ -142,6 +143,10 @@ class VMSTEP:
         reply = self.send_command(Cmd.GOTO, distance)
         return reply
 
+    def stop(self):
+        reply = self.send_command(Cmd.STOP)
+        return struct.unpack("<L", reply)[0]
+
     def home(self, direction: bool):
         direction = direction.to_bytes(length=1, byteorder="little")
         print("direction", direction)
@@ -161,7 +166,7 @@ if __name__ == "__main__":
     # status = mc.query(Query.FAULTS)
 
     status = mc.set_parameters(
-        Settings(11, 15, 7, 100, 4000, 40000, False, False, False, False, True, True)
+        Settings(11, 15, 7, 100, 2000, 40000, False, False, False, False, True, True)
     )
     print("Reply: ", status)
 
@@ -170,4 +175,5 @@ if __name__ == "__main__":
 
     status = mc.goto(1600)
     print("Reply: ", status)
+
     mc.close()

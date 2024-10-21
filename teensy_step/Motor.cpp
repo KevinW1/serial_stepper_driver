@@ -50,8 +50,11 @@ void Motor::disable_driver() {
 }
 
 void Motor::goto_pos(long steps) {
-    // move motor
     stepper.moveTo(steps);
+}
+
+long Motor::position() {
+    return stepper.currentPosition();
 }
 
 void Motor::run() {

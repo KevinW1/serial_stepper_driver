@@ -15,6 +15,7 @@ class Motor {
     Settings_union* settings;
     Motor(byte pin_cs, byte pin_step, byte pin_dir, Settings_union &settings);
     void goto_pos(long steps);
+    long position();
     void init();
     void enable_driver();
     void disable_driver();
