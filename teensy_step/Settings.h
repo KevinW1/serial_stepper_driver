@@ -1,12 +1,19 @@
 #ifndef Settings_h
 #define Settings_h
 
+#include <Arduino.h>
+
+struct SettingLimits {
+    static constexpr uint8_t MAX_CURRENT = 0b1111;        // 4 bits
+    static constexpr uint8_t MAX_MICROSTEP_RES = 0b1111;  // 4 bits
+};
+
 struct __attribute__((packed)) Settings_struct {
     //motor
-    uint8_t step_current;          // 4 bits
-    uint8_t sleep_current;         // 4 bits
-    uint8_t microstep_resolution;  // 4 bits
-    uint8_t sleep_timeout;         //8 bits, 10s of ms
+    uint8_t step_current;   // 4 bits
+    uint8_t sleep_current;  // 4 bits
+    uint8_t microstep_res;  // 4 bits
+    uint8_t sleep_timeout;  //8 bits, 10s of ms
     //trajectory
     uint16_t top_speed;     // 16 bits
     uint16_t acceleration;  // 16 bits
@@ -23,5 +30,7 @@ union Settings_union {
     Settings_struct data;
     byte bytes[sizeof(Settings_struct)];
 };
+
+bool validate_settings(const Settings_union& settings);
 
 #endif

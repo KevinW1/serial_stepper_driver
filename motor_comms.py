@@ -69,7 +69,7 @@ class Settings:
 class VMSTEP:
     VMSTEP_SERIAL_KWARGS: Mapping = MappingProxyType(
         {
-            "baudrate": 9600,
+            "baudrate": 19200,
             "parity": serial.PARITY_NONE,
             "stopbits": serial.STOPBITS_ONE,
             "bytesize": serial.EIGHTBITS,
@@ -95,7 +95,9 @@ class VMSTEP:
         data = self._port.read_until(LINE_END)
         if not (data.startswith(LINE_BEGIN) and data.endswith(LINE_END)):
             raise IOError(f"Invalid response: {data}")
-        data = data[1:-1]  # strip line begin/end bytes
+        return data[1:-1]  # strip line begin/end bytes
+
+    def parse_reply(self, data: bytes):
         reply_code = Reply(data[0:1])  # extract reply code
 
         if reply_code == Reply.ACK:
@@ -116,7 +118,7 @@ class VMSTEP:
             message += arg_bytes
         message += LINE_END
         self._port.write(message)
-        return self.recieve()
+        return self.parse_reply(self.recieve())
 
     def reset(self):
         self.send_command(Cmd.RESET)
@@ -139,17 +141,22 @@ class VMSTEP:
 
     def goto(self, distance: int):
         distance = distance.to_bytes(length=4, byteorder="little", signed=True)
-        print("distance", distance)
+        print("sent distance", distance)
         reply = self.send_command(Cmd.GOTO, distance)
         return reply
 
     def stop(self):
-        reply = self.send_command(Cmd.STOP)
-        return struct.unpack("<L", reply)[0]
+        self.send_command(Cmd.STOP)
+        # TODO: needs to wait for a longer timeout
+        # because of the decel time
+        data = self.recieve()
+        reply_code = Reply(data[0:1])
+        if reply_code == Reply.DONE:
+            return struct.unpack("<L", data[1:])[0]
 
     def home(self, direction: bool):
         direction = direction.to_bytes(length=1, byteorder="little")
-        print("direction", direction)
+        print("sent direction", direction)
         reply = self.send_command(Cmd.HOME, direction)
         return reply
 
@@ -157,7 +164,7 @@ class VMSTEP:
 # Example Usage:
 if __name__ == "__main__":
     print("start")
-    mc = VMSTEP(port="COM3")
+    mc = VMSTEP(port="/dev/ttyACM0")
     print("object made")
     # Example commands
     # status = mc.echo()
@@ -165,15 +172,35 @@ if __name__ == "__main__":
     # status = mc.home(True)
     # status = mc.query(Query.FAULTS)
 
-    status = mc.set_parameters(
-        Settings(11, 15, 7, 100, 2000, 40000, False, False, False, False, True, True)
+    settings = Settings(
+        step_current=11,
+        sleep_current=15,
+        microstep_resolution=7,
+        sleep_timeout=100,
+        top_speed=2000,
+        acceleration=4000,
+        enable_lim1=True,
+        enable_lim2=True,
+        enable_home=True,
+        lim1_sig_polarity=False,
+        lim2_sig_polarity=False,
+        home_sig_polarity=False,
     )
+
+    status = mc.set_parameters(settings)
     print("Reply: ", status)
 
     status = mc.get_parameters()
     print("Reply: ", status)
 
-    status = mc.goto(1600)
-    print("Reply: ", status)
+    # status = mc.goto(16000)
+    # print("Reply: ", status)
+
+    # sleep(1)
+    # status = mc.stop()
+    # print(status)
+
+    # status = mc.home(False)
+    # print("Reply: ", status)
 
     mc.close()

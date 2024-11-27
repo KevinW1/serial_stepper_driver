@@ -1,33 +1,33 @@
 #ifndef Comms_h
 #define Comms_h
 
-#include <arduino.h>
+#include <Arduino.h>
 
 // serial commands
-const uint8_t CMD_GOTO = 'G';
-const uint8_t CMD_STOP = 'S';
-const uint8_t CMD_HOME = 'H';
-const uint8_t CMD_RESET = 'R';
-const uint8_t CMD_QUERY = 'Q';
-const uint8_t CMD_UPDATE_PARAMETERS = 'P';
-const uint8_t CMD_ECHO = 'E';
+static constexpr char CMD_GOTO = 'G';
+static constexpr char CMD_STOP = 'S';
+static constexpr char CMD_HOME = 'H';
+static constexpr char CMD_RESET = 'R';
+static constexpr char CMD_QUERY = 'Q';
+static constexpr char CMD_UPDATE_PARAMETERS = 'P';
+static constexpr char CMD_ECHO = 'E';
 // Query
-const uint8_t QUERY_MODEL_NO = 'M';
-const uint8_t QUERY_SERIAL_NO = 'S';
-const uint8_t QUERY_PARAMETERS = 'P';
-const uint8_t QUERY_FAULTS = 'F';
+static constexpr char QUERY_MODEL_NO = 'M';
+static constexpr char QUERY_SERIAL_NO = 'S';
+static constexpr char QUERY_PARAMETERS = 'P';
+static constexpr char QUERY_FAULTS = 'F';
 // Replies
-const uint8_t REPLY_ACK = 'A';
-const uint8_t REPLY_DONE = 'D';
-const uint8_t REPLY_FAULT = 'F';
-const uint8_t REPLY_ECHO = 'E';
+static constexpr char REPLY_ACK = 'A';
+static constexpr char REPLY_DONE = 'D';
+static constexpr char REPLY_FAULT = 'F';
+static constexpr char REPLY_ECHO = 'E';
 // Faults
-const uint8_t FAULT_NACK = 'N';
-const uint8_t FAULT_DRIVER = 'D';
-const uint8_t FAULT_INVALID_PARAMETERS = 'P';
-const uint8_t FAULT_LIMT1 = 'L';
-const uint8_t FAULT_LIMT2 = 'K';
-const uint8_t FAULT_HOME = 'H';
+static constexpr char FAULT_NACK = 'N';
+static constexpr char FAULT_DRIVER = 'D';
+static constexpr char FAULT_INVALID_PARAMETERS = 'P';
+static constexpr char FAULT_LIMT1 = 'L';
+static constexpr char FAULT_LIMT2 = 'K';
+static constexpr char FAULT_HOME = 'H';
 
 void init_serial(int);
 

@@ -1,7 +1,7 @@
 #ifndef Motor_h
 #define Motor_h
 
-#include <arduino.h>
+#include <Arduino.h>
 #include <SPI.h>
 #include <DRV8434S.h>
 #include <AccelStepper.h>
@@ -12,16 +12,22 @@ class Motor {
     uint8_t pin_cs;
     uint8_t pin_step;
     uint8_t pin_dir;
+    bool driver_enabled = false;
     Settings_union* settings;
-    Motor(byte pin_cs, byte pin_step, byte pin_dir, Settings_union &settings);
+    Motor(uint8_t pin_cs, uint8_t pin_step, uint8_t pin_dir, Settings_union& settings);
     void goto_pos(long steps);
     long position();
+    bool set_current(uint8_t current);
     void init();
     void enable_driver();
     void disable_driver();
-    void update_settings();
+    bool update_settings();
+    void set_home_speed(long home_speed);
     void run();
+    void run_continuous();
     void stop();
+    long steps_remaining();
+    void reset_position();
 
   private:
     AccelStepper stepper;

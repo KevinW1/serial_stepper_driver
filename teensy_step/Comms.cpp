@@ -1,4 +1,3 @@
-#include <arduino.h>
 #include "Comms.h"
 
 void init_serial(int baud) {
