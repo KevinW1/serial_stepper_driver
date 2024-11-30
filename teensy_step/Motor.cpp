@@ -2,35 +2,41 @@
 #include "Settings.h"
 
 // constructor
-Motor::Motor(byte _pin_cs, byte _pin_step, byte _pin_dir, Settings_union &_settings)
-    // init children
-    : stepper{ AccelStepper::DRIVER, _pin_step, _pin_dir }, sd{} {
-    // init
-    pin_cs = _pin_cs;
-    pin_step = _pin_step;
-    pin_dir = _pin_dir;
-    settings = &_settings;
+Motor::Motor(byte pin_cs, byte pin_step, byte pin_dir, byte pin_enable, byte pin_sleep, Settings_union &_settings)
+    : PIN_CS(pin_cs),
+      PIN_STEP(pin_step),
+      PIN_DIR(pin_dir),
+      PIN_ENABLE(pin_enable),
+      PIN_SLEEP(pin_sleep),
+      settings(&_settings),
+      // init children
+      stepper{ AccelStepper::DRIVER, pin_step, pin_dir },
+      sd{} {
 }
 
 void Motor::init() {
     SPI.begin();
-    sd.setChipSelectPin(pin_cs);
+    sd.setChipSelectPin(PIN_CS);
 
     // Drive the STEP and DIR pins low initially.
-    pinMode(pin_step, OUTPUT);
-    pinMode(pin_dir, OUTPUT);
-    digitalWrite(pin_step, LOW);
-    digitalWrite(pin_dir, LOW);
+    pinMode(PIN_STEP, OUTPUT);
+    pinMode(PIN_DIR, OUTPUT);
+    pinMode(PIN_ENABLE, OUTPUT);
+    pinMode(PIN_SLEEP, OUTPUT);
+
+    digitalWrite(PIN_STEP, LOW);
+    digitalWrite(PIN_DIR, LOW);
+    digitalWrite(PIN_ENABLE, HIGH);
+    digitalWrite(PIN_SLEEP, HIGH);
 
     delay(1);
     // Reset the driver to its default settings and clear latched fault
     // conditions.
     // TODO: set better defaults in driver library
     sd.resetSettings();
+    set_current(0b0000);  // min
     sd.clearFaults();
-    update_settings();
-    set_current(0b0000); // min
-    enable_driver();
+    // enable_driver();
 }
 
 bool Motor::set_current(uint8_t current) {
@@ -65,21 +71,19 @@ void Motor::set_home_speed(long home_speed) {
 }
 
 void Motor::enable_driver() {
-    if (!driver_enabled) {
-        sd.enableDriver();
-        driver_enabled = true;
-    }
+    sd.enableDriver();
+    digitalWrite(PIN_ENABLE, HIGH);
+    driver_enabled = true;
 }
 
 void Motor::disable_driver() {
-    if (driver_enabled) {
-        sd.disableDriver();
-        driver_enabled = false;
-    }
+    sd.disableDriver();
+    digitalWrite(PIN_ENABLE, LOW);
+    driver_enabled = false;
 }
 
 void Motor::goto_pos(long steps) {
-    stepper.moveTo(steps);
+    stepper.move(steps);
 }
 
 long Motor::position() {

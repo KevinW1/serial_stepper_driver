@@ -9,12 +9,14 @@
 
 class Motor {
   public:
-    uint8_t pin_cs;
-    uint8_t pin_step;
-    uint8_t pin_dir;
+    const uint8_t PIN_CS;
+    const uint8_t PIN_STEP;
+    const uint8_t PIN_DIR;
+    const uint8_t PIN_ENABLE;
+    const uint8_t PIN_SLEEP;
     bool driver_enabled = false;
     Settings_union* settings;
-    Motor(uint8_t pin_cs, uint8_t pin_step, uint8_t pin_dir, Settings_union& settings);
+    Motor(uint8_t pin_cs, uint8_t pin_step, uint8_t pin_dir, uint8_t pin_enable, uint8_t pin_sleep, Settings_union& settings);
     void goto_pos(long steps);
     long position();
     bool set_current(uint8_t current);

@@ -2,7 +2,7 @@
 
 void init_serial(int baud) {
     Serial.begin(baud);
-    // Serial.clear();  //Teensy only
+    Serial.clear();  //Teensy only
 }
 
 

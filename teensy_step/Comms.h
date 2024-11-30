@@ -11,9 +11,16 @@ static constexpr char CMD_RESET = 'R';
 static constexpr char CMD_QUERY = 'Q';
 static constexpr char CMD_UPDATE_PARAMETERS = 'P';
 static constexpr char CMD_ECHO = 'E';
+// commads allowed in fault state
+static constexpr byte FAULT_ALLOWED_CMDS[] = {
+    CMD_RESET,
+    CMD_QUERY,
+    CMD_ECHO
+};
 // Query
 static constexpr char QUERY_MODEL_NO = 'M';
 static constexpr char QUERY_SERIAL_NO = 'S';
+static constexpr char QUERY_FIRMWARE = 'W';
 static constexpr char QUERY_PARAMETERS = 'P';
 static constexpr char QUERY_FAULTS = 'F';
 // Replies
@@ -25,6 +32,7 @@ static constexpr char REPLY_ECHO = 'E';
 static constexpr char FAULT_NACK = 'N';
 static constexpr char FAULT_DRIVER = 'D';
 static constexpr char FAULT_INVALID_PARAMETERS = 'P';
+static constexpr char FAULT_DRIVER_SYNC = 'Y';
 static constexpr char FAULT_LIMT1 = 'L';
 static constexpr char FAULT_LIMT2 = 'K';
 static constexpr char FAULT_HOME = 'H';

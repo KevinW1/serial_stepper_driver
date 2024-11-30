@@ -27,6 +27,7 @@ class Cmd(Enum):
 class Query(Enum):
     MODEL_NO = b"M"
     SERIAL_NO = b"S"
+    FIRMWARE = b"W"
     PARAMETERS = b"P"
     FAULTS = b"F"
 
@@ -42,6 +43,7 @@ class Fault(Enum):
     NACK = b"N"
     DRIVER = b"D"
     INVALID_PARAMETERS = b"P"
+    DRIVER_SYNC = b"Y"
     LIMT1 = b"L"
     LIMT2 = b"K"
     HOME = b"H"
@@ -91,8 +93,9 @@ class VMSTEP:
     def _clear_buffer(self):
         self._port.read_all()
 
-    def recieve(self):
+    def receive(self):
         data = self._port.read_until(LINE_END)
+        print(f"Received: {data}")
         if not (data.startswith(LINE_BEGIN) and data.endswith(LINE_END)):
             raise IOError(f"Invalid response: {data}")
         return data[1:-1]  # strip line begin/end bytes
@@ -111,17 +114,19 @@ class VMSTEP:
             fault = Fault(data[1:2]).name  # second byte is fault-type
             print(f"Fault: {fault}")
 
-    def send_command(self, command: int, arg_bytes: bytes = None):
+    def send_command(self, command: Cmd, arg_bytes: bytes = None):
+        print(f"Sending: {command.name}")
         message = LINE_BEGIN
         message += command.value
         if arg_bytes:
             message += arg_bytes
         message += LINE_END
         self._port.write(message)
-        return self.parse_reply(self.recieve())
+        return self.parse_reply(self.receive())
 
     def reset(self):
-        self.send_command(Cmd.RESET)
+        result = self.send_command(Cmd.RESET)
+        return result
 
     def echo(self):
         results = self.send_command(Cmd.ECHO)
@@ -141,7 +146,6 @@ class VMSTEP:
 
     def goto(self, distance: int):
         distance = distance.to_bytes(length=4, byteorder="little", signed=True)
-        print("sent distance", distance)
         reply = self.send_command(Cmd.GOTO, distance)
         return reply
 
@@ -149,14 +153,13 @@ class VMSTEP:
         self.send_command(Cmd.STOP)
         # TODO: needs to wait for a longer timeout
         # because of the decel time
-        data = self.recieve()
+        data = self.receive()
         reply_code = Reply(data[0:1])
         if reply_code == Reply.DONE:
             return struct.unpack("<L", data[1:])[0]
 
     def home(self, direction: bool):
         direction = direction.to_bytes(length=1, byteorder="little")
-        print("sent direction", direction)
         reply = self.send_command(Cmd.HOME, direction)
         return reply
 
@@ -173,19 +176,22 @@ if __name__ == "__main__":
     # status = mc.query(Query.FAULTS)
 
     settings = Settings(
-        step_current=11,
-        sleep_current=15,
+        step_current=1,
+        sleep_current=0,
         microstep_resolution=7,
         sleep_timeout=100,
-        top_speed=2000,
+        top_speed=8000,
         acceleration=4000,
-        enable_lim1=True,
-        enable_lim2=True,
+        enable_lim1=False,
+        enable_lim2=False,
         enable_home=True,
         lim1_sig_polarity=False,
         lim2_sig_polarity=False,
         home_sig_polarity=False,
     )
+
+    # status = mc.reset()
+    # print("Reply: ", status)
 
     status = mc.set_parameters(settings)
     print("Reply: ", status)
@@ -193,14 +199,14 @@ if __name__ == "__main__":
     status = mc.get_parameters()
     print("Reply: ", status)
 
-    # status = mc.goto(16000)
-    # print("Reply: ", status)
+    status = mc.goto(1600)
+    print("Reply: ", status)
 
     # sleep(1)
     # status = mc.stop()
     # print(status)
 
-    # status = mc.home(False)
+    # status = mc.home(True)
     # print("Reply: ", status)
 
     mc.close()
