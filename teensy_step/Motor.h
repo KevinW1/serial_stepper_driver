@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include <SPI.h>
-#include <DRV8434S.h>
+#include "DRV8434S.h"
 #include <AccelStepper.h>
 #include "Settings.h"
 

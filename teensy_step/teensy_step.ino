@@ -21,12 +21,12 @@ static constexpr byte PIN_HOME = 14;
 static constexpr uint16_t LED_PULSE_PERIOD = 2000;  // 2 second cycle
 
 Settings_union settings = {
-    0b0011,  // run current (mid)
+    0b0000,  // run current (mid)
     0b0000,  // sleep current (min)
-    0b0110,  // microstep res (1/16th)
-    0x64,    // sleep timeout 1s
+    0b0111,  // microstep res (1/32nd)
+    0x64,    // sleep timeout 1000ms
     0x07D0,  // top speed 2000
-    0x4E20,  // accel 20,000
+    0x0FA0,  // accel 4,000
     0b0,     // enable lim1
     0b0,     // enable lim2
     0b1,     // enable home
@@ -50,6 +50,7 @@ union {
 
 Mode device_mode = Mode::idle;
 unsigned long idle_time = 0;
+unsigned long home_start_time = 0;
 SerialTransciever Comms;
 Motor motor(PIN_SCS, PIN_STEP, PIN_DIR, PIN_ENABLE, PIN_SLEEP, settings);
 
@@ -66,7 +67,7 @@ void reset_controller() {
     // sensors
     pinMode(PIN_LIM1, INPUT_PULLUP);
     pinMode(PIN_LIM2, INPUT_PULLUP);
-    pinMode(PIN_HOME, INPUT_PULLDOWN);
+    pinMode(PIN_HOME, INPUT_PULLUP);
     // driver
     pinMode(PIN_FAULT, INPUT_PULLUP);  // logic low = fault
     // led
@@ -83,6 +84,7 @@ void reset_controller() {
     }
 
     motor.enable_driver();
+
     enter_idle_state();
     Comms.send(REPLY_ACK, "Controller Reset");
 }
@@ -112,10 +114,10 @@ void enter_moving_state() {
 
 void enter_homing_state() {
     device_mode = Mode::homing;
+    // apply run current to motor
     motor.set_current(settings.data.step_current);
     analogWrite(PIN_LED_G, 128);
     analogWrite(PIN_LED_R, 128);
-    // apply run current to motor
 }
 
 void enter_fault_state() {
@@ -148,11 +150,14 @@ void motor_home(byte data[]) {
         msg = "Homing direction: Backward";
     }
     motor.set_home_speed(homing_speed);
+    home_start_time = millis();
     enter_homing_state();
     Comms.send(REPLY_ACK, msg);
     // limits are checks in the main loop
 }
 
+// TODO: add hard stop
+// TODO: manage state transition form homing
 void motor_stop() {
     motor.stop();
     enter_moving_state();
@@ -239,7 +244,7 @@ void process_message(byte data[], size_t length) {
 
 void check_sensors() {
     // Check driver fault (active low)
-    if (digitalRead(PIN_FAULT) == LOW) {
+    if (digitalRead(PIN_FAULT) == LOW && device_mode != Mode::fault) {
         enter_fault_state();
         Comms.send(REPLY_FAULT, FAULT_DRIVER);
         return;
@@ -302,9 +307,7 @@ void loop() {
         Comms.new_data = false;
     }
 
-    if (device_mode != Mode::fault) {
-        check_sensors();
-    }
+    check_sensors();
 
     switch (device_mode) {
         case Mode::moving: moving(); break;

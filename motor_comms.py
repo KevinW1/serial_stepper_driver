@@ -176,12 +176,12 @@ if __name__ == "__main__":
     # status = mc.query(Query.FAULTS)
 
     settings = Settings(
-        step_current=1,
+        step_current=0,
         sleep_current=0,
         microstep_resolution=7,
         sleep_timeout=100,
-        top_speed=8000,
-        acceleration=4000,
+        top_speed=20000,
+        acceleration=60000,
         enable_lim1=False,
         enable_lim2=False,
         enable_home=True,
@@ -199,7 +199,7 @@ if __name__ == "__main__":
     status = mc.get_parameters()
     print("Reply: ", status)
 
-    status = mc.goto(1600)
+    status = mc.goto(2500)
     print("Reply: ", status)
 
     # sleep(1)

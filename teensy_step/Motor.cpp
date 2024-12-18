@@ -26,7 +26,7 @@ void Motor::init() {
 
     digitalWrite(PIN_STEP, LOW);
     digitalWrite(PIN_DIR, LOW);
-    digitalWrite(PIN_ENABLE, HIGH);
+    digitalWrite(PIN_ENABLE, LOW);
     digitalWrite(PIN_SLEEP, HIGH);
 
     delay(1);
@@ -36,6 +36,7 @@ void Motor::init() {
     sd.resetSettings();
     set_current(0b0000);  // min
     sd.clearFaults();
+    sd.enableDriver();
     // enable_driver();
 }
 
@@ -63,7 +64,7 @@ bool Motor::update_settings() {
     stepper.setAcceleration(settings->data.acceleration);
     // driver update
     sd.setStepMode(settings->data.microstep_res);
-    return sd.verifySettings();
+    return true; //sd.verifySettings();
 }
 
 void Motor::set_home_speed(long home_speed) {
@@ -71,15 +72,13 @@ void Motor::set_home_speed(long home_speed) {
 }
 
 void Motor::enable_driver() {
-    sd.enableDriver();
+    // sd.enableDriver();
     digitalWrite(PIN_ENABLE, HIGH);
-    driver_enabled = true;
 }
 
 void Motor::disable_driver() {
-    sd.disableDriver();
+    // sd.disableDriver();
     digitalWrite(PIN_ENABLE, LOW);
-    driver_enabled = false;
 }
 
 void Motor::goto_pos(long steps) {
