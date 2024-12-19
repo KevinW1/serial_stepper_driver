@@ -67,10 +67,6 @@ bool Motor::update_settings() {
     return true; //sd.verifySettings();
 }
 
-void Motor::set_home_speed(long home_speed) {
-    stepper.setSpeed(home_speed);
-}
-
 void Motor::enable_driver() {
     // sd.enableDriver();
     digitalWrite(PIN_ENABLE, HIGH);

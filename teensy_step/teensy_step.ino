@@ -1,6 +1,7 @@
 #include "Comms.h"
 #include "Settings.h"
 #include "Motor.h"
+#include <limits.h>
 
 // pin definitions
 // Motor
@@ -141,16 +142,15 @@ void motor_home(byte data[]) {
         enter_fault_state();
         return;
     }
-    // Set continuous motion direction based on homing direction
+    // Set motion direction based on homing direction
     byte homing_direction = data[1];
-    long homing_speed = settings.data.top_speed;
+    long homing_pos = LONG_MAX;
     String msg = "Homing direction: Forward";
     if (!homing_direction) {
-        homing_speed *= -1;
+        homing_pos *= -1;
         msg = "Homing direction: Backward";
     }
-    motor.set_home_speed(homing_speed);
-    home_start_time = millis();
+    motor.goto_pos(homing_pos);
     enter_homing_state();
     Comms.send(REPLY_ACK, msg);
     // limits are checks in the main loop
@@ -284,7 +284,14 @@ void moving() {
 }
 
 void homing() {
-    motor.run_continuous();
+    if (motor.steps_remaining() == 0) {
+        // home distance exceedd max position value.
+        position.value = motor.position();
+        enter_fault_state();
+        Comms.send(REPLY_FAULT, FAULT_HOME);
+    } else {
+        motor.run();
+    }
 }
 
 void idle() {

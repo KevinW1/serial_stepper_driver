@@ -180,7 +180,7 @@ if __name__ == "__main__":
         sleep_current=0,
         microstep_resolution=7,
         sleep_timeout=100,
-        top_speed=20000,
+        top_speed=4000,
         acceleration=60000,
         enable_lim1=False,
         enable_lim2=False,
@@ -199,14 +199,14 @@ if __name__ == "__main__":
     status = mc.get_parameters()
     print("Reply: ", status)
 
-    status = mc.goto(2500)
-    print("Reply: ", status)
+    # status = mc.goto(2500)
+    # print("Reply: ", status)
 
     # sleep(1)
     # status = mc.stop()
     # print(status)
 
-    # status = mc.home(True)
-    # print("Reply: ", status)
+    status = mc.home(True)
+    print("Reply: ", status)
 
     mc.close()

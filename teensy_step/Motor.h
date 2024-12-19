@@ -24,7 +24,6 @@ class Motor {
     void enable_driver();
     void disable_driver();
     bool update_settings();
-    void set_home_speed(long home_speed);
     void run();
     void run_continuous();
     void stop();
