@@ -51,7 +51,7 @@ union {
 
 Mode device_mode = Mode::idle;
 unsigned long idle_time = 0;
-unsigned long home_start_time = 0;
+bool enabled = false;
 SerialTransciever Comms;
 Motor motor(PIN_SCS, PIN_STEP, PIN_DIR, PIN_ENABLE, PIN_SLEEP, settings);
 
@@ -85,6 +85,7 @@ void reset_controller() {
     }
 
     motor.enable_driver();
+    enabled = true;
 
     enter_idle_state();
     Comms.send(REPLY_ACK, "Controller Reset");
@@ -156,8 +157,6 @@ void motor_home(byte data[]) {
     // limits are checks in the main loop
 }
 
-// TODO: add hard stop
-// TODO: manage state transition form homing
 void motor_stop() {
     motor.stop();
     enter_moving_state();
@@ -166,6 +165,21 @@ void motor_stop() {
 
 void motor_hard_stop() {
     motor.reset_position();
+    Comms.send(REPLY_ACK);
+}
+
+void motor_enable() {
+    motor.enable_driver();
+    enabled = true;
+    enter_idle_state();
+    Comms.send(REPLY_ACK);
+}
+
+void motor_disable() {
+    motor.disable_driver();
+    enabled = false;
+    enter_idle_state();
+    Comms.send(REPLY_ACK);
 }
 
 void controller_update(byte data[], size_t length) {
@@ -237,6 +251,8 @@ void process_message(byte data[], size_t length) {
         case CMD_QUERY: controller_query(data); break;
         case CMD_UPDATE_PARAMETERS: controller_update(data, length); break;
         case CMD_ECHO: controller_echo(); break;
+        case CMD_ENABLE: motor_enable(); break;
+        case CMD_DISABLE: motor_disable(); break;
         default:
             Comms.send(REPLY_FAULT, FAULT_NACK);
     }

@@ -22,6 +22,8 @@ class Cmd(Enum):
     QUERY = b"Q"
     UPDATE_PARAMETERS = b"P"
     ECHO = b"E"
+    ENABLE = b"Y"
+    DISABLE = b"X"
 
 
 class Query(Enum):
@@ -136,6 +138,14 @@ class VMSTEP:
         results = self.send_command(Cmd.QUERY, query.value)
         return results
 
+    def enable(self):
+        results = self.send_command(Cmd.ENABLE)
+        return results
+
+    def disable(self):
+        results = self.send_command(Cmd.DISABLE)
+        return results
+
     def get_parameters(self):
         reply = self.query(Query.PARAMETERS)
         return Settings.from_packed(reply)
@@ -199,6 +209,9 @@ if __name__ == "__main__":
     status = mc.get_parameters()
     print("Reply: ", status)
 
+    status = mc.disable()
+    print("Reply: ", status)
+
     # status = mc.goto(2500)
     # print("Reply: ", status)
 
@@ -206,7 +219,7 @@ if __name__ == "__main__":
     # status = mc.stop()
     # print(status)
 
-    status = mc.home(True)
-    print("Reply: ", status)
+    # status = mc.home(True)
+    # print("Reply: ", status)
 
     mc.close()

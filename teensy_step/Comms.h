@@ -11,6 +11,8 @@ static constexpr char CMD_RESET = 'R';
 static constexpr char CMD_QUERY = 'Q';
 static constexpr char CMD_UPDATE_PARAMETERS = 'P';
 static constexpr char CMD_ECHO = 'E';
+static constexpr char CMD_ENABLE = 'Y';
+static constexpr char CMD_DISABLE = 'X';
 // commads allowed in fault state
 static constexpr byte FAULT_ALLOWED_CMDS[] = {
     CMD_RESET,
