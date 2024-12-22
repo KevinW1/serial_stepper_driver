@@ -30,10 +30,13 @@ class Motor {
     void hard_stop();
     long steps_remaining();
     void reset_position();
+    bool try_verify_settings();
+    byte* get_fault_registers();
 
   private:
     AccelStepper stepper;
     DRV8434S sd;
+    byte fault_registers[3];  // [fault_reg, diag1_reg, diag2_reg]
 };
 
 #endif

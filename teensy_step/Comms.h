@@ -28,6 +28,7 @@ static constexpr char QUERY_PARAMETERS = 'P';
 static constexpr char QUERY_FAULTS = 'F';
 static constexpr char QUERY_POSITION = 'X';
 static constexpr char QUERY_MODE = 'T';
+static constexpr char QUERY_FAULT_REGS = 'R';
 // Replies
 static constexpr char REPLY_ACK = 'A';
 static constexpr char REPLY_DONE = 'D';

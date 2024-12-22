@@ -380,6 +380,15 @@ class DRV8434S {
         writeCachedReg(DRV8434SRegAddr::CTRL1);
     }
 
+    // allows setting the current byte with sensible inversion so max current is max value.
+    void setCurrent(uint8_t current) {
+        static constexpr uint8_t max_current = 0b1111; // 15
+        if (current > max_current) { current = max_current; }
+        uint8_t td = max_current - current;
+        ctrl1 = (ctrl1 & 0b00001111) | (td << 4);
+        writeCachedReg(DRV8434SRegAddr::CTRL1);
+    }
+
     /// Enables the driver (EN_OUT = 1).
     void enableDriver() {
         ctrl2 |= (1 << 7);

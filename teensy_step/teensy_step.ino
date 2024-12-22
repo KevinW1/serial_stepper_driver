@@ -51,7 +51,6 @@ union {
 
 Mode device_mode = Mode::idle;
 unsigned long idle_time = 0;
-bool enabled = false;
 SerialTransciever Comms;
 Motor motor(PIN_SCS, PIN_STEP, PIN_DIR, PIN_ENABLE, PIN_SLEEP, settings);
 
@@ -157,25 +156,24 @@ void motor_home(byte data[]) {
 
 void motor_stop() {
     motor.stop();
-    enter_moving_state();
+    enter_moving_state(); //decel
     Comms.send(REPLY_ACK);
 }
 
 void motor_hard_stop() {
     motor.hard_stop();
+    enter_idle_state();
     Comms.send(REPLY_ACK);
 }
 
 void motor_enable() {
     motor.enable_driver();
-    enabled = true;
     enter_idle_state();
     Comms.send(REPLY_ACK);
 }
 
 void motor_disable() {
     motor.disable_driver();
-    enabled = false;
     enter_idle_state();
     Comms.send(REPLY_ACK);
 }
@@ -238,6 +236,11 @@ void controller_query(byte data[]) {
             Comms.send(REPLY_ACK, &mode, 1);
             break;
         }
+        case QUERY_FAULT_REGS: {
+            byte* fault_registers = motor.get_fault_registers();
+            Comms.send(REPLY_ACK, fault_registers, 3);  // Send all 3 registers
+            break;
+        }
         
         default:
             Comms.send(REPLY_FAULT, FAULT_NACK);
@@ -281,8 +284,13 @@ void process_message(byte data[], size_t length) {
 void check_sensors() {
     // Check driver fault (active low)
     if (digitalRead(PIN_FAULT) == LOW && device_mode != Mode::fault) {
+        // Create fault report array: [FAULT_DRIVER, fault_reg, diag1_reg, diag2_reg]
+        byte fault_data[4] = { FAULT_DRIVER };
+        byte* fault_registers = motor.get_fault_registers();
+        memcpy(fault_data + 1, fault_registers, 3);
+        
         enter_fault_state();
-        Comms.send(REPLY_FAULT, FAULT_DRIVER);
+        Comms.send(REPLY_FAULT, fault_data, sizeof(fault_data));
         return;
     }
 

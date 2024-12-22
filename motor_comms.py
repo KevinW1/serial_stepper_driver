@@ -36,6 +36,7 @@ class Query(Enum):
     FAULTS = b"F"
     POSITION = b"X"
     MODE = b"T"
+    FAULT_REGS = b"R"  # Add new query type
 
 
 class DeviceMode(Enum):
@@ -120,13 +121,27 @@ class VMSTEP:
         if reply_code == Reply.ACK:
             return data[1:]  # strip reply byte
 
-        elif reply_code == Reply.DONE:
-            # TODO handle done.
-            return data[1:]
-
         elif reply_code == Reply.FAULT:
-            fault = Fault(data[1:2]).name  # second byte is fault-type
-            print(f"Fault: {fault}")
+            fault = Fault(data[1:2])  # first byte is fault-type
+
+            if fault == Fault.DRIVER:
+                fault_reg = data[2]  # DRV8434S fault register
+                diag1_reg = data[3]  # DRV8434S diagnostic 1 register
+                diag2_reg = data[4]  # DRV8434S diagnostic 2 register
+
+                print(f"Driver Fault:")
+                print(f"  Fault register: 0x{fault_reg:02x}")
+                print(f"  Diag1 register: 0x{diag1_reg:02x}")
+                print(f"  Diag2 register: 0x{diag2_reg:02x}")
+
+                error_msg = self.parse_driver_fault(fault_reg, diag1_reg, diag2_reg)
+                print("\nFault details:")
+                print(error_msg)
+
+                raise RuntimeError(f"Driver Fault:\n{error_msg}")
+            else:
+                print(f"Fault: {fault}")
+                raise RuntimeError(f"Device fault: {fault}")
 
     def send_command(self, command: Cmd, arg_bytes: bytes = None):
         print(f"Sending: {command.name}")
@@ -216,6 +231,81 @@ class VMSTEP:
         """Reset the current position to zero"""
         return self.send_command(Cmd.RESET_POSITION)
 
+    def parse_driver_fault(self, fault_reg: int, diag1_reg: int, diag2_reg: int) -> str:
+        """Parse DRV8434S fault registers into human readable message"""
+        messages = []
+
+        # Parse main fault register
+        if fault_reg & (1 << 7):
+            messages.append("FAULT pin active")
+        if fault_reg & (1 << 6):
+            messages.append("SPI protocol error")
+        if fault_reg & (1 << 5):
+            messages.append("Supply undervoltage lockout")
+        if fault_reg & (1 << 4):
+            messages.append("Charge pump undervoltage")
+        if fault_reg & (1 << 3):
+            messages.append("Overcurrent")
+        if fault_reg & (1 << 2):
+            messages.append("Motor stall")
+        if fault_reg & (1 << 1):
+            messages.append("Thermal flag")
+        if fault_reg & (1 << 0):
+            messages.append("Open load")
+
+        # Parse DIAG1 register (overcurrent flags)
+        if diag1_reg & (1 << 7):
+            messages.append("Overcurrent on BOUT low-side FET 2")
+        if diag1_reg & (1 << 6):
+            messages.append("Overcurrent on BOUT high-side FET 2")
+        if diag1_reg & (1 << 5):
+            messages.append("Overcurrent on BOUT low-side FET 1")
+        if diag1_reg & (1 << 4):
+            messages.append("Overcurrent on BOUT high-side FET 1")
+        if diag1_reg & (1 << 3):
+            messages.append("Overcurrent on AOUT low-side FET 2")
+        if diag1_reg & (1 << 2):
+            messages.append("Overcurrent on AOUT high-side FET 2")
+        if diag1_reg & (1 << 1):
+            messages.append("Overcurrent on AOUT low-side FET 1")
+        if diag1_reg & (1 << 0):
+            messages.append("Overcurrent on AOUT high-side FET 1")
+
+        # Parse DIAG2 register
+        if diag2_reg & (1 << 6):
+            messages.append("Overtemperature warning")
+        if diag2_reg & (1 << 5):
+            messages.append("Overtemperature shutdown")
+        if diag2_reg & (1 << 4):
+            messages.append("Stall detection learning successful")
+        if diag2_reg & (1 << 3):
+            messages.append("Motor stall detected")
+        if diag2_reg & (1 << 1):
+            messages.append("Open load on BOUT")
+        if diag2_reg & (1 << 0):
+            messages.append("Open load on AOUT")
+
+        if not messages:
+            return "No faults detected"
+
+        return "\n".join(messages)
+
+    def get_fault_registers(self) -> tuple[int, int, int]:
+        """
+        Query the driver fault registers directly.
+        Returns:
+            tuple(fault_reg, diag1_reg, diag2_reg)
+        """
+        reply = self.query(Query.FAULT_REGS)
+        if len(reply) != 3:
+            raise RuntimeError("Invalid fault register response length")
+
+        fault_reg = reply[0]
+        diag1_reg = reply[1]
+        diag2_reg = reply[2]
+
+        return (fault_reg, diag1_reg, diag2_reg)
+
 
 # Example Usage:
 if __name__ == "__main__":
@@ -229,12 +319,12 @@ if __name__ == "__main__":
     # status = mc.query(Query.FAULTS)
 
     settings = Settings(
-        step_current=0,
+        step_current=1,
         sleep_current=0,
         microstep_resolution=7,
         sleep_timeout=100,
-        top_speed=16000,
-        acceleration=120000,
+        top_speed=40000,
+        acceleration=200000,
         enable_lim1=False,
         enable_lim2=False,
         enable_home=True,
@@ -267,16 +357,27 @@ if __name__ == "__main__":
     # status = mc.stop()
     # print(status)
 
-    status = mc.home(False)
-    status = mc.goto(-750)
+    # # status = mc.home(False)
+    status = mc.goto(-7500)
     status = mc.disable()
 
     status = mc.get_position()
     print("Position: ", status)
 
-    mc.reset_position()
+    # mc.reset_position()
 
-    status = mc.get_position()
-    print("Position: ", status)
+    # status = mc.get_position()
+    # print("Position: ", status)
+
+    # Get fault registers
+    # fault_reg, diag1_reg, diag2_reg = mc.get_fault_registers()
+    # print(f"Fault register: 0x{fault_reg:02x}")
+    # print(f"DIAG1 register: 0x{diag1_reg:02x}")
+    # print(f"DIAG2 register: 0x{diag2_reg:02x}")
+
+    # # Parse the registers if desired
+    # error_msg = mc.parse_driver_fault(fault_reg, diag1_reg, diag2_reg)
+    # print("\nFault details:")
+    # print(error_msg)
 
     mc.close()
