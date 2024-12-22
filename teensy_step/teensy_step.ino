@@ -83,10 +83,8 @@ void reset_controller() {
         Comms.send(REPLY_FAULT, FAULT_DRIVER_SYNC);
         return;
     }
-
-    motor.enable_driver();
-    enabled = true;
-
+    
+    motor.disable_driver();
     enter_idle_state();
     Comms.send(REPLY_ACK, "Controller Reset");
 }
@@ -148,7 +146,7 @@ void motor_home(byte data[]) {
     long homing_pos = LONG_MAX;
     String msg = "Homing direction: Forward";
     if (!homing_direction) {
-        homing_pos *= -1;
+        homing_pos = -LONG_MAX;
         msg = "Homing direction: Backward";
     }
     motor.goto_pos(homing_pos);
@@ -164,7 +162,7 @@ void motor_stop() {
 }
 
 void motor_hard_stop() {
-    motor.reset_position();
+    motor.hard_stop();
     Comms.send(REPLY_ACK);
 }
 
@@ -178,6 +176,17 @@ void motor_enable() {
 void motor_disable() {
     motor.disable_driver();
     enabled = false;
+    enter_idle_state();
+    Comms.send(REPLY_ACK);
+}
+
+void motor_reset_position() {
+    if (device_mode != Mode::idle && device_mode != Mode::sleep) {
+        Comms.send(REPLY_FAULT, FAULT_NACK);
+        return;
+    }
+    motor.reset_position();
+    position.value = 0;  // Reset our position tracking
     enter_idle_state();
     Comms.send(REPLY_ACK);
 }
@@ -212,16 +221,26 @@ void controller_echo() {
 void controller_query(byte data[]) {
     byte query_type = data[1];
     switch (query_type) {
-        // TODO: pull from names.c
+        // Existing cases
         case QUERY_MODEL_NO: Comms.send(REPLY_ACK, "Model no: 123"); break;
         case QUERY_SERIAL_NO: Comms.send(REPLY_ACK, "Serial no: 456"); break;
         case QUERY_FIRMWARE: Comms.send(REPLY_ACK, "Firmware: 0.0.1"); break;
         case QUERY_PARAMETERS:
             Comms.send(REPLY_ACK, settings.bytes, sizeof(settings.bytes));
             break;
+        case QUERY_POSITION: {
+            position.value = motor.position(); // Update position from motor
+            Comms.send(REPLY_ACK, position.bytes, sizeof(position.bytes));
+            break;
+        }
+        case QUERY_MODE: {
+            byte mode = static_cast<byte>(device_mode);
+            Comms.send(REPLY_ACK, &mode, 1);
+            break;
+        }
+        
         default:
-            byte fault_data[] = { FAULT_NACK };
-            Comms.send(REPLY_FAULT, fault_data, 1);
+            Comms.send(REPLY_FAULT, FAULT_NACK);
     }
 }
 
@@ -253,6 +272,7 @@ void process_message(byte data[], size_t length) {
         case CMD_ECHO: controller_echo(); break;
         case CMD_ENABLE: motor_enable(); break;
         case CMD_DISABLE: motor_disable(); break;
+        case CMD_RESET_POSITION: motor_reset_position(); break;
         default:
             Comms.send(REPLY_FAULT, FAULT_NACK);
     }
@@ -270,6 +290,7 @@ void check_sensors() {
     if (settings.data.enable_home && device_mode == Mode::homing) {
         if (digitalRead(PIN_HOME) == settings.data.home_sig_polarity) {
             enter_idle_state();
+            motor.reset_position();
             Comms.send(REPLY_DONE);
         }
     }
@@ -302,7 +323,6 @@ void moving() {
 void homing() {
     if (motor.steps_remaining() == 0) {
         // home distance exceedd max position value.
-        position.value = motor.position();
         enter_fault_state();
         Comms.send(REPLY_FAULT, FAULT_HOME);
     } else {

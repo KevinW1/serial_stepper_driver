@@ -100,6 +100,11 @@ void Motor::run_continuous() {
 void Motor::stop() {
     stepper.stop();
 }
-void Motor::reset_position() {
+
+void Motor::hard_stop() {
     stepper.setCurrentPosition(stepper.targetPosition());
+}
+
+void Motor::reset_position() {
+    stepper.setCurrentPosition(0);
 }

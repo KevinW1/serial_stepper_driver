@@ -27,6 +27,7 @@ class Motor {
     void run();
     void run_continuous();
     void stop();
+    void hard_stop();
     long steps_remaining();
     void reset_position();
 
