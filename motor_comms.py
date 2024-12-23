@@ -44,10 +44,12 @@ DIAG1_MESSAGES = {
 }
 
 DIAG2_MESSAGES = {
+    # 7: "Reserved",
     6: "Overtemperature warning",
     5: "Overtemperature shutdown",
     4: "Stall detection learning successful",
     3: "Motor stall detected",
+    # 2: "Reserved",
     1: "Open load on BOUT",
     0: "Open load on AOUT",
 }
@@ -151,7 +153,7 @@ class VMSTEP:
         port_list = comports()
 
         if len(port_list) == 0:
-            raise serial.SerialException("No serial ports found on this machine")
+            raise SerialException("No serial ports found on this machine")
 
         for p in port_list:
             if p.manufacturer != MANUFACTURER and p.product != PRODUCT:
@@ -203,7 +205,7 @@ class VMSTEP:
     def receive(self):
         data = self._port.read_until(LINE_END)
         if not (data.startswith(LINE_BEGIN) and data.endswith(LINE_END)):
-            self.logger.error(f"Invalid response: {data}")
+            raise SerialException(f"Invalid response: {data}")
         return data[1:-1]  # strip line begin/end bytes
 
     def parse_reply(self, data: bytes):
@@ -369,52 +371,22 @@ if __name__ == "__main__":
     with VMSTEP.discover() as mc:
         status = mc.set_parameters(settings)
         print("Reply: ", status)
-        status = mc.enable()
-        status = mc.goto(-7500)
-        status = mc.disable()
 
-        status = mc.get_position()
-        print("Position: ", status)
+        # Query ###########################
+        # echo = mc.echo()
+        # serial = mc.query(Query.SERIAL_NO)
+        # model = mc.query(Query.MODEL_NO)
+        # firm = mc.query(Query.FIRMWARE)
+        # position = mc.get_position()
+        # parms = mc.get_parameters()
+        # print(f"Echo: {echo}")
+        # print(f"Serial: {serial}")
+        # print(f"Model: {model}")
+        # print(f"Firmware: {firm}")
+        # print(f"Position: {position}")
+        # print(f"Parameters: {parms}")
 
-        # mc = VMSTEP(port="/dev/ttyACM0")
-        # print("object made")
-        # Example commands
-        # status = mc.echo()
-        status = mc.query(Query.SERIAL_NO)
-        print("Serial: ", status)
-        status = mc.query(Query.MODEL_NO)
-        print("Model: ", status)
-
-        # status = mc.home(True)
-        # status = mc.query(Query.FAULTS)
-
-        # status = mc.reset()
-        # print("Reply: ", status)
-
-        # status = mc.get_position()
-        # print("Reply: ", status)
-
-        # status = mc.get_parameters()
-        # print("Reply: ", status)
-
-        # status = mc.goto(-250)
-        # print("Reply: ", status)
-
-        # status = mc.disable()
-        # print("Reply: ", status)
-
-        # time.sleep(1)
-        # status = mc.stop()
-        # print(status)
-
-        # # status = mc.home(False)
-
-        # mc.reset_position()
-
-        # status = mc.get_position()
-        # print("Position: ", status)
-
-        # Get fault registers
+        # # Get fault registers
         # fault_reg, diag1_reg, diag2_reg = mc.get_fault_registers()
         # print(f"Fault register: 0x{fault_reg:02x}")
         # print(f"DIAG1 register: 0x{diag1_reg:02x}")
@@ -422,5 +394,14 @@ if __name__ == "__main__":
 
         # # Parse the registers if desired
         # error_msg = mc.parse_driver_fault(fault_reg, diag1_reg, diag2_reg)
-        # print("\nFault details:")
-        # print(error_msg)
+        # print(f"\nFault details: \n{error_msg}")
+
+        # Homing ##########################
+        mc.enable()
+        settings.top_speed = 10000
+        mc.set_parameters(settings)
+        mc.home(False)
+        status = mc.goto(-830)
+        print("Reply: ", status)
+        mc.reset_position()
+        mc.disable()
