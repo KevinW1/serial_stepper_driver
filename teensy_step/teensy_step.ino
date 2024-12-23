@@ -1,6 +1,7 @@
 #include "Comms.h"
 #include "Settings.h"
 #include "Motor.h"
+#include "name.h"
 #include <limits.h>
 
 // pin definitions
@@ -37,20 +38,21 @@ Settings_union settings = {
 };
 
 enum class Mode {
-    idle,
-    sleep,
-    moving,
-    homing,
-    fault
+    idle,   // waiting for commands, full current
+    sleep,  // waiting for commands, low current
+    moving, // moving to a position
+    homing, // moving, waiting for home sensor
+    fault   // Stop all operations
 };
+Mode device_mode = Mode::idle;
+
+unsigned long idle_time = 0; // time controler entered idle state
 
 union {
     long value;
     uint8_t bytes[4];
 } position;
 
-Mode device_mode = Mode::idle;
-unsigned long idle_time = 0;
 SerialTransciever Comms;
 Motor motor(PIN_SCS, PIN_STEP, PIN_DIR, PIN_ENABLE, PIN_SLEEP, settings);
 
@@ -59,11 +61,14 @@ void setup() {
 }
 
 void reset_controller() {
+    init_serial();
+    // Check if settings are valid
     if (!validate_settings(settings)) {
         Comms.send(REPLY_FAULT, FAULT_INVALID_PARAMETERS);
         enter_fault_state();
         return;
     }
+
     // sensors
     pinMode(PIN_LIM1, INPUT_PULLUP);
     pinMode(PIN_LIM2, INPUT_PULLUP);
@@ -74,20 +79,20 @@ void reset_controller() {
     pinMode(PIN_LED_R, OUTPUT);
     pinMode(PIN_LED_G, OUTPUT);
 
-    init_serial(19200);
     motor.init();
 
+    // Check communication with driver
     if (!motor.update_settings()) {
         enter_fault_state();
         Comms.send(REPLY_FAULT, FAULT_DRIVER_SYNC);
         return;
     }
     
-    motor.disable_driver();
     enter_idle_state();
-    Comms.send(REPLY_ACK, "Controller Reset");
+    Comms.send(REPLY_ACK);
 }
 
+// State control functions
 void enter_idle_state() {
     device_mode = Mode::idle;
     idle_time = millis();
@@ -127,6 +132,7 @@ void enter_fault_state() {
     analogWrite(PIN_LED_R, 255);
 }
 
+// Motor command functions
 void motor_goto(byte data[]) {
     memcpy(position.bytes, data + 1, sizeof(position.bytes));
     motor.goto_pos(position.value);
@@ -140,17 +146,14 @@ void motor_home(byte data[]) {
         enter_fault_state();
         return;
     }
-    // Set motion direction based on homing direction
-    byte homing_direction = data[1];
+    // Set homing direction from byte 1
     long homing_pos = LONG_MAX;
-    String msg = "Homing direction: Forward";
-    if (!homing_direction) {
+    if (!data[1]) {
         homing_pos = -LONG_MAX;
-        msg = "Homing direction: Backward";
     }
     motor.goto_pos(homing_pos);
     enter_homing_state();
-    Comms.send(REPLY_ACK, msg);
+    Comms.send(REPLY_ACK);
     // limits are checks in the main loop
 }
 
@@ -189,7 +192,13 @@ void motor_reset_position() {
     Comms.send(REPLY_ACK);
 }
 
-void controller_update(byte data[], size_t length) {
+// Controller functions
+
+void controller_echo() {
+    Comms.send(REPLY_ACK, REPLY_ECHO);
+}
+
+void update_parameters(byte data[], size_t length) {
     // First byte is always the command byte
     if (length - 1 == sizeof(settings.bytes)) {
         // Validate before applying
@@ -212,16 +221,27 @@ void controller_update(byte data[], size_t length) {
     }
 }
 
-void controller_echo() {
-    Comms.send(REPLY_ACK, REPLY_ECHO);
-}
-
 void controller_query(byte data[]) {
     byte query_type = data[1];
     switch (query_type) {
-        // Existing cases
-        case QUERY_MODEL_NO: Comms.send(REPLY_ACK, "Model no: 123"); break;
-        case QUERY_SERIAL_NO: Comms.send(REPLY_ACK, "Serial no: 456"); break;
+        case QUERY_MODEL_NO: {
+            // Create static array from macro
+            static const char product[] = PRODUCT_NAME;
+            char model[PRODUCT_NAME_LEN + 1];  // +1 for null terminator
+            memcpy(model, product, PRODUCT_NAME_LEN);
+            model[PRODUCT_NAME_LEN] = '\0';
+            Comms.send(REPLY_ACK, model);
+            break;
+        }
+        case QUERY_SERIAL_NO: {
+            // Create static array from macro
+            static const char serial_num[] = SERIAL_NUMBER;
+            char serial[SERIAL_NUMBER_LEN + 1];  // +1 for null terminator
+            memcpy(serial, serial_num, SERIAL_NUMBER_LEN);
+            serial[SERIAL_NUMBER_LEN] = '\0';
+            Comms.send(REPLY_ACK, serial);
+            break;
+        }
         case QUERY_FIRMWARE: Comms.send(REPLY_ACK, "Firmware: 0.0.1"); break;
         case QUERY_PARAMETERS:
             Comms.send(REPLY_ACK, settings.bytes, sizeof(settings.bytes));
@@ -271,7 +291,7 @@ void process_message(byte data[], size_t length) {
         case CMD_HOME: motor_home(data); break;
         case CMD_RESET: reset_controller(); break;
         case CMD_QUERY: controller_query(data); break;
-        case CMD_UPDATE_PARAMETERS: controller_update(data, length); break;
+        case CMD_UPDATE_PARAMETERS: update_parameters(data, length); break;
         case CMD_ECHO: controller_echo(); break;
         case CMD_ENABLE: motor_enable(); break;
         case CMD_DISABLE: motor_disable(); break;
@@ -318,6 +338,21 @@ void check_sensors() {
     }
 }
 
+// Loop activities
+
+void idle() {
+    if ((millis() - idle_time) > (settings.data.sleep_timeout * 10)) {
+        enter_sleep_state();
+    }
+}
+
+void sleeping() {
+    // pulse led geen
+    float phase = (float)((millis() % LED_PULSE_PERIOD) * 2 * PI) / LED_PULSE_PERIOD;
+    byte brightness = (byte)(128 + 127 * sin(phase));
+    analogWrite(PIN_LED_G, brightness);
+}
+
 void moving() {
     if (motor.steps_remaining() == 0) {
         position.value = motor.position();
@@ -338,19 +373,6 @@ void homing() {
     }
 }
 
-void idle() {
-    if ((millis() - idle_time) > (settings.data.sleep_timeout * 10)) {
-        enter_sleep_state();
-    }
-}
-
-void sleeping() {
-    // pulse led geen
-    float phase = (float)((millis() % LED_PULSE_PERIOD) * 2 * PI) / LED_PULSE_PERIOD;
-    byte brightness = (byte)(128 + 127 * sin(phase));
-    analogWrite(PIN_LED_G, brightness);
-}
-
 void loop() {
     Comms.run();
     if (Comms.new_data) {
@@ -361,10 +383,10 @@ void loop() {
     check_sensors();
 
     switch (device_mode) {
-        case Mode::moving: moving(); break;
-        case Mode::homing: homing(); break;
         case Mode::idle: idle(); break;
         case Mode::sleep: sleeping(); break;
+        case Mode::moving: moving(); break;
+        case Mode::homing: homing(); break;
         default: break;
     }
 }

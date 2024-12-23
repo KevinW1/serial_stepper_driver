@@ -1,10 +1,9 @@
 #include "Comms.h"
 
-void init_serial(int baud) {
-    Serial.begin(baud);
+void init_serial() {
+    Serial.begin(BAUD_RATE);
     Serial.clear();  //Teensy only
 }
-
 
 SerialTransciever::SerialTransciever() {
     reset();
@@ -16,23 +15,23 @@ void SerialTransciever::reset() {
 }
 
 void SerialTransciever::send(byte reply_code, byte msg[], size_t length) {
-    Serial.write(start_marker);
+    Serial.write(START_MARKER);
     Serial.write(reply_code);
     Serial.write(msg, length);
-    Serial.write(end_marker);
+    Serial.write(END_MARKER);
 }
 
 void SerialTransciever::send(byte reply_code, byte data) {
-    Serial.write(start_marker);
+    Serial.write(START_MARKER);
     Serial.write(reply_code);
     Serial.write(data);
-    Serial.write(end_marker);
+    Serial.write(END_MARKER);
 }
 
 void SerialTransciever::send(byte reply_code) {
-    Serial.write(start_marker);
+    Serial.write(START_MARKER);
     Serial.write(reply_code);
-    Serial.write(end_marker);
+    Serial.write(END_MARKER);
 }
 
 void SerialTransciever::send(byte reply_code, String msg) {
@@ -49,14 +48,14 @@ void SerialTransciever::recieve() {
         if (recv_in_progress == true) {
 
             // data done, roll it up!
-            if (incoming_byte == end_marker) {
+            if (incoming_byte == END_MARKER) {
                 // recv_data[cursor] = '\0';  // null terminate the string
                 new_data = true;
                 data_length = cursor;
                 reset();
 
                 // previous data fucked, start reading the new message
-            } else if (incoming_byte == start_marker) {
+            } else if (incoming_byte == START_MARKER) {
                 new_data = false;
                 cursor = 0;
                 Serial.println("You sent double start markers! bad!");
@@ -73,7 +72,7 @@ void SerialTransciever::recieve() {
                 recv_data[cursor] = incoming_byte;
                 cursor++;
             }
-        } else if (incoming_byte == start_marker) {
+        } else if (incoming_byte == START_MARKER) {
             recv_in_progress = true;
         }
         // no start marker and not in progress

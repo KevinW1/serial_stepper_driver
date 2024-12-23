@@ -11,6 +11,14 @@
 ///
 /// That is the main repository for this library.
 
+
+/// Modifications
+///
+/// delay(1); added after writing to the register to ensure the value takes effect.
+///
+/// setCurrent(); added to allow setting direct setting of current byte.
+
+
 #pragma once
 
 #include <Arduino.h>

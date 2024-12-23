@@ -1,18 +1,56 @@
+from __future__ import annotations
+
+import logging
 import struct
 import time
 from collections.abc import Mapping
 from enum import Enum
-from time import sleep
-from types import MappingProxyType
+from types import MappingProxyType, TracebackType
+from typing import Optional, Type
 
 import dataclasses_struct as dcs
-import numpy as np
 import serial
 from serial import SerialException
-from serial.tools import list_ports
+from serial.tools.list_ports import comports
+
+logger = logging.getLogger(__name__)
+
+MANUFACTURER = "VIRTUALMATTER"
+PRODUCT = "VMSTEP"
 
 LINE_BEGIN = b"["
 LINE_END = b"]"
+
+FAULT_MESSAGES = {
+    7: "FAULT pin active",
+    6: "SPI protocol error",
+    5: "Supply undervoltage lockout",
+    4: "Charge pump undervoltage",
+    3: "Overcurrent",
+    2: "Motor stall",
+    1: "Thermal flag",
+    0: "Open load",
+}
+
+DIAG1_MESSAGES = {
+    7: "Overcurrent on BOUT low-side FET 2",
+    6: "Overcurrent on BOUT high-side FET 2",
+    5: "Overcurrent on BOUT low-side FET 1",
+    4: "Overcurrent on BOUT high-side FET 1",
+    3: "Overcurrent on AOUT low-side FET 2",
+    2: "Overcurrent on AOUT high-side FET 2",
+    1: "Overcurrent on AOUT low-side FET 1",
+    0: "Overcurrent on AOUT high-side FET 1",
+}
+
+DIAG2_MESSAGES = {
+    6: "Overtemperature warning",
+    5: "Overtemperature shutdown",
+    4: "Stall detection learning successful",
+    3: "Motor stall detected",
+    1: "Open load on BOUT",
+    0: "Open load on AOUT",
+}
 
 
 class Cmd(Enum):
@@ -25,7 +63,7 @@ class Cmd(Enum):
     ECHO = b"E"
     ENABLE = b"Y"
     DISABLE = b"X"
-    RESET_POSITION = b"Z"  # New command
+    RESET_POSITION = b"Z"
 
 
 class Query(Enum):
@@ -36,12 +74,10 @@ class Query(Enum):
     FAULTS = b"F"
     POSITION = b"X"
     MODE = b"T"
-    FAULT_REGS = b"R"  # Add new query type
+    FAULT_REGS = b"R"
 
 
 class DeviceMode(Enum):
-    """Maps to the Mode enum in the Arduino code"""
-
     IDLE = 0
     SLEEP = 1
     MOVING = 2
@@ -96,23 +132,78 @@ class VMSTEP:
         }
     )
 
-    def __init__(self, port=None):
-        if isinstance(port, str):
-            self._port = serial.Serial(port, **self.VMSTEP_SERIAL_KWARGS)
+    @classmethod
+    def discover(self, serial_number=None) -> "VMSTEP":
+        """Attempt automatic discovery of the VMSTEP serial port
+        and return the VMSTEP object.
+
+        Returns
+        -------
+        VMSTEP
+            A successfully located VMSTEP object.
+
+        Raises
+        ------
+        serial.SerialException
+            If no serial port can be automatically linked.
+        """
+
+        port_list = comports()
+
+        if len(port_list) == 0:
+            raise serial.SerialException("No serial ports found on this machine")
+
+        for p in port_list:
+            if p.manufacturer != MANUFACTURER and p.product != PRODUCT:
+                continue
+
+            if not serial_number or p.serial_number == serial_number:
+                serial_port = serial.Serial(p.device, **self.VMSTEP_SERIAL_KWARGS)
+                serial_port.read_all()
+                return VMSTEP(serial_port)
+            else:
+                continue
+
+        raise serial.SerialException(
+            """Could not connect to any devices.
+                Check connection and power."""
+        )
+
+    def __init__(self, serial_port=None):
+        self.logger = logging.getLogger(__name__)
+        if isinstance(serial_port, str):
+            self._port = serial.Serial(serial_port, **self.VMSTEP_SERIAL_KWARGS)
         else:
-            self._port = port
+            self._port = serial_port
+
+    def __enter__(self) -> Self:
+        self.open()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> bool:
+        self.close()
+        return False
+
+    def _clear_buffer(self):
+        self._port.read_all()
+
+    def open(self):
+        if isinstance(self._port, str):
+            self._port = serial.Serial(self._port, **self.VMSTEP_SERIAL_KWARGS)
         self._clear_buffer()
 
     def close(self):
         self._port.close()
 
-    def _clear_buffer(self):
-        self._port.read_all()
-
     def receive(self):
         data = self._port.read_until(LINE_END)
         if not (data.startswith(LINE_BEGIN) and data.endswith(LINE_END)):
-            raise IOError(f"Invalid response: {data}")
+            self.logger.error(f"Invalid response: {data}")
         return data[1:-1]  # strip line begin/end bytes
 
     def parse_reply(self, data: bytes):
@@ -128,23 +219,13 @@ class VMSTEP:
                 fault_reg = data[2]  # DRV8434S fault register
                 diag1_reg = data[3]  # DRV8434S diagnostic 1 register
                 diag2_reg = data[4]  # DRV8434S diagnostic 2 register
-
-                print(f"Driver Fault:")
-                print(f"  Fault register: 0x{fault_reg:02x}")
-                print(f"  Diag1 register: 0x{diag1_reg:02x}")
-                print(f"  Diag2 register: 0x{diag2_reg:02x}")
-
                 error_msg = self.parse_driver_fault(fault_reg, diag1_reg, diag2_reg)
-                print("\nFault details:")
-                print(error_msg)
-
                 raise RuntimeError(f"Driver Fault:\n{error_msg}")
             else:
-                print(f"Fault: {fault}")
                 raise RuntimeError(f"Device fault: {fault}")
 
     def send_command(self, command: Cmd, arg_bytes: bytes = None):
-        print(f"Sending: {command.name}")
+        self.logger.debug(f"Sending: {command.name}")
         message = LINE_BEGIN
         message += command.value
         if arg_bytes:
@@ -154,8 +235,7 @@ class VMSTEP:
         return self.parse_reply(self.receive())
 
     def reset(self):
-        result = self.send_command(Cmd.RESET)
-        return result
+        self.send_command(Cmd.RESET)
 
     def echo(self):
         results = self.send_command(Cmd.ECHO)
@@ -166,12 +246,10 @@ class VMSTEP:
         return results
 
     def enable(self):
-        results = self.send_command(Cmd.ENABLE)
-        return results
+        self.send_command(Cmd.ENABLE)
 
     def disable(self):
-        results = self.send_command(Cmd.DISABLE)
-        return results
+        self.send_command(Cmd.DISABLE)
 
     def get_parameters(self):
         reply = self.query(Query.PARAMETERS)
@@ -210,8 +288,6 @@ class VMSTEP:
         direction = direction.to_bytes(length=1, byteorder="little")
         self.send_command(Cmd.HOME, direction)
         self.wait_for_done(timeout_s)
-        # r
-        return "Homeing Done"
 
     def get_position(self) -> int:
         """Query current motor position. Returns position in steps."""
@@ -229,61 +305,24 @@ class VMSTEP:
 
     def reset_position(self):
         """Reset the current position to zero"""
-        return self.send_command(Cmd.RESET_POSITION)
+        self.send_command(Cmd.RESET_POSITION)
 
     def parse_driver_fault(self, fault_reg: int, diag1_reg: int, diag2_reg: int) -> str:
         """Parse DRV8434S fault registers into human readable message"""
         messages = []
 
-        # Parse main fault register
-        if fault_reg & (1 << 7):
-            messages.append("FAULT pin active")
-        if fault_reg & (1 << 6):
-            messages.append("SPI protocol error")
-        if fault_reg & (1 << 5):
-            messages.append("Supply undervoltage lockout")
-        if fault_reg & (1 << 4):
-            messages.append("Charge pump undervoltage")
-        if fault_reg & (1 << 3):
-            messages.append("Overcurrent")
-        if fault_reg & (1 << 2):
-            messages.append("Motor stall")
-        if fault_reg & (1 << 1):
-            messages.append("Thermal flag")
-        if fault_reg & (1 << 0):
-            messages.append("Open load")
+        # Parse each register
+        for bit, msg in FAULT_MESSAGES.items():
+            if fault_reg & (1 << bit):
+                messages.append(msg)
 
-        # Parse DIAG1 register (overcurrent flags)
-        if diag1_reg & (1 << 7):
-            messages.append("Overcurrent on BOUT low-side FET 2")
-        if diag1_reg & (1 << 6):
-            messages.append("Overcurrent on BOUT high-side FET 2")
-        if diag1_reg & (1 << 5):
-            messages.append("Overcurrent on BOUT low-side FET 1")
-        if diag1_reg & (1 << 4):
-            messages.append("Overcurrent on BOUT high-side FET 1")
-        if diag1_reg & (1 << 3):
-            messages.append("Overcurrent on AOUT low-side FET 2")
-        if diag1_reg & (1 << 2):
-            messages.append("Overcurrent on AOUT high-side FET 2")
-        if diag1_reg & (1 << 1):
-            messages.append("Overcurrent on AOUT low-side FET 1")
-        if diag1_reg & (1 << 0):
-            messages.append("Overcurrent on AOUT high-side FET 1")
+        for bit, msg in DIAG1_MESSAGES.items():
+            if diag1_reg & (1 << bit):
+                messages.append(msg)
 
-        # Parse DIAG2 register
-        if diag2_reg & (1 << 6):
-            messages.append("Overtemperature warning")
-        if diag2_reg & (1 << 5):
-            messages.append("Overtemperature shutdown")
-        if diag2_reg & (1 << 4):
-            messages.append("Stall detection learning successful")
-        if diag2_reg & (1 << 3):
-            messages.append("Motor stall detected")
-        if diag2_reg & (1 << 1):
-            messages.append("Open load on BOUT")
-        if diag2_reg & (1 << 0):
-            messages.append("Open load on AOUT")
+        for bit, msg in DIAG2_MESSAGES.items():
+            if diag2_reg & (1 << bit):
+                messages.append(msg)
 
         if not messages:
             return "No faults detected"
@@ -298,7 +337,7 @@ class VMSTEP:
         """
         reply = self.query(Query.FAULT_REGS)
         if len(reply) != 3:
-            raise RuntimeError("Invalid fault register response length")
+            raise ValueError("Invalid fault register response length")
 
         fault_reg = reply[0]
         diag1_reg = reply[1]
@@ -309,14 +348,8 @@ class VMSTEP:
 
 # Example Usage:
 if __name__ == "__main__":
-    print("start")
-    mc = VMSTEP(port="/dev/ttyACM0")
-    print("object made")
-    # Example commands
-    # status = mc.echo()
-    # status = mc.query(Query.SERIAL_NO)
-    # status = mc.home(True)
-    # status = mc.query(Query.FAULTS)
+    logging.basicConfig(level=logging.INFO)
+    logger.info("Start")
 
     settings = Settings(
         step_current=1,
@@ -333,51 +366,61 @@ if __name__ == "__main__":
         home_sig_polarity=False,
     )
 
-    # status = mc.reset()
-    # print("Reply: ", status)
+    with VMSTEP.discover() as mc:
+        status = mc.set_parameters(settings)
+        print("Reply: ", status)
+        status = mc.enable()
+        status = mc.goto(-7500)
+        status = mc.disable()
 
-    # status = mc.get_position()
-    # print("Reply: ", status)
+        status = mc.get_position()
+        print("Position: ", status)
 
-    status = mc.set_parameters(settings)
-    print("Reply: ", status)
+        # mc = VMSTEP(port="/dev/ttyACM0")
+        # print("object made")
+        # Example commands
+        # status = mc.echo()
+        status = mc.query(Query.SERIAL_NO)
+        print("Serial: ", status)
+        status = mc.query(Query.MODEL_NO)
+        print("Model: ", status)
 
-    # status = mc.get_parameters()
-    # print("Reply: ", status)
+        # status = mc.home(True)
+        # status = mc.query(Query.FAULTS)
 
-    status = mc.enable()
+        # status = mc.reset()
+        # print("Reply: ", status)
 
-    # status = mc.goto(-250)
-    # print("Reply: ", status)
+        # status = mc.get_position()
+        # print("Reply: ", status)
 
-    # status = mc.disable()
-    # print("Reply: ", status)
+        # status = mc.get_parameters()
+        # print("Reply: ", status)
 
-    # sleep(1)
-    # status = mc.stop()
-    # print(status)
+        # status = mc.goto(-250)
+        # print("Reply: ", status)
 
-    # # status = mc.home(False)
-    status = mc.goto(-7500)
-    status = mc.disable()
+        # status = mc.disable()
+        # print("Reply: ", status)
 
-    status = mc.get_position()
-    print("Position: ", status)
+        # time.sleep(1)
+        # status = mc.stop()
+        # print(status)
 
-    # mc.reset_position()
+        # # status = mc.home(False)
 
-    # status = mc.get_position()
-    # print("Position: ", status)
+        # mc.reset_position()
 
-    # Get fault registers
-    # fault_reg, diag1_reg, diag2_reg = mc.get_fault_registers()
-    # print(f"Fault register: 0x{fault_reg:02x}")
-    # print(f"DIAG1 register: 0x{diag1_reg:02x}")
-    # print(f"DIAG2 register: 0x{diag2_reg:02x}")
+        # status = mc.get_position()
+        # print("Position: ", status)
 
-    # # Parse the registers if desired
-    # error_msg = mc.parse_driver_fault(fault_reg, diag1_reg, diag2_reg)
-    # print("\nFault details:")
-    # print(error_msg)
+        # Get fault registers
+        # fault_reg, diag1_reg, diag2_reg = mc.get_fault_registers()
+        # print(f"Fault register: 0x{fault_reg:02x}")
+        # print(f"DIAG1 register: 0x{diag1_reg:02x}")
+        # print(f"DIAG2 register: 0x{diag2_reg:02x}")
 
-    mc.close()
+        # # Parse the registers if desired
+        # error_msg = mc.parse_driver_fault(fault_reg, diag1_reg, diag2_reg)
+        # print("\nFault details:")
+        # print(error_msg)
