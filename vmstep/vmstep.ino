@@ -23,18 +23,23 @@ static constexpr byte PIN_HOME = 14;
 static constexpr uint16_t LED_PULSE_PERIOD = 2000;  // 2 second cycle
 
 Settings_union settings = {
-    0b0000,  // run current (mid)
-    0b0000,  // sleep current (min)
-    0b0111,  // microstep res (1/32nd)
-    0x64,    // sleep timeout 1000ms
-    0x07D0,  // top speed 2000
-    0x0FA0,  // accel 4,000
-    0b0,     // enable lim1
-    0b0,     // enable lim2
-    0b1,     // enable home
-    0b0,     // lim1 pol
-    0b0,     // lim2 pol
-    0b0,     // home pol
+    .data = {
+        .step_current = 0b0000,      // run current (min)
+        .sleep_current = 0b0000,     // sleep current (min)
+        .microstep_res = 0b0111,     // microstep res (1/32nd)
+        .sleep_timeout = 0x64,       // sleep timeout 1000ms
+        .top_speed = 0x07D0,         // top speed 2000
+        .acceleration = 0x0FA0,       // acceleration 4,000
+        .flags = {                   // limit switch flags
+            .enable_lim1 = 0,        // bit 0
+            .enable_lim2 = 0,        // bit 1
+            .enable_home = 0,        // bit 2
+            .lim1_sig_polarity = 0,  // bit 3
+            .lim2_sig_polarity = 0,  // bit 4
+            .home_sig_polarity = 0,  // bit 5
+            .reserved = 0            // bits 6-7
+        }
+    }
 };
 
 enum class Mode {
@@ -141,7 +146,7 @@ void motor_goto(byte data[]) {
 }
 
 void motor_home(byte data[]) {
-    if (!settings.data.enable_home) {
+    if (!settings.data.flags.enable_home) {
         Comms.send(REPLY_FAULT, FAULT_HOME);
         enter_fault_state();
         return;
@@ -315,23 +320,23 @@ void check_sensors() {
     }
 
     // check home
-    if (settings.data.enable_home && device_mode == Mode::homing) {
-        if (digitalRead(PIN_HOME) == settings.data.home_sig_polarity) {
+    if (settings.data.flags.enable_home && device_mode == Mode::homing) {
+        if (digitalRead(PIN_HOME) == settings.data.flags.home_sig_polarity) {
             enter_idle_state();
             motor.reset_position();
             Comms.send(REPLY_DONE);
         }
     }
     // check lim 1
-    if (settings.data.enable_lim1) {
-        if (digitalRead(PIN_LIM1) == settings.data.lim1_sig_polarity) {
+    if (settings.data.flags.enable_lim1) {
+        if (digitalRead(PIN_LIM1) == settings.data.flags.lim1_sig_polarity) {
             enter_fault_state();
             Comms.send(REPLY_FAULT, FAULT_LIMT1);
         }
     }
     // check lim 2
-    if (settings.data.enable_lim2) {
-        if (digitalRead(PIN_LIM2) == settings.data.lim2_sig_polarity) {
+    if (settings.data.flags.enable_lim2) {
+        if (digitalRead(PIN_LIM2) == settings.data.flags.lim2_sig_polarity) {
             enter_fault_state();
             Comms.send(REPLY_FAULT, FAULT_LIMT2);
         }

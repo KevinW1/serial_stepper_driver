@@ -2,15 +2,19 @@
 #define Name_h
 
 // Manufacturer name definition
+#undef MANUFACTURER_NAME
 #define MANUFACTURER_NAME                                               \
     {                                                                   \
         'V', 'I', 'R', 'T', 'U', 'A', 'L', 'M', 'A', 'T', 'T', 'E', 'R' \
     }
+#undef MANUFACTURER_NAME_LEN
 #define MANUFACTURER_NAME_LEN 13
 
 // Product name definition
+#undef PRODUCT_NAME
 #define PRODUCT_NAME \
     { 'V', 'M', 'S', 'T', 'E', 'P' }
+#undef PRODUCT_NAME_LEN
 #define PRODUCT_NAME_LEN 6
 
 // Serial number definition  

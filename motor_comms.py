@@ -8,10 +8,11 @@ from enum import Enum
 from types import MappingProxyType, TracebackType
 from typing import Optional, Type
 
-import dataclasses_struct as dcs
 import serial
 from serial import SerialException
 from serial.tools.list_ports import comports
+
+from ctypes import Structure, c_uint8, c_uint32, Union, sizeof
 
 logger = logging.getLogger(__name__)
 
@@ -103,25 +104,39 @@ class Fault(Enum):
     LIMT2 = b"K"
     HOME = b"H"
 
+class SettingsFlags(Structure):
+    """Maps to the flags bitfield struct in Settings_struct"""
+    _fields_ = [
+        ("enable_lim1", c_uint8, 1),        # bit 0
+        ("enable_lim2", c_uint8, 1),        # bit 1
+        ("enable_home", c_uint8, 1),        # bit 2
+        ("lim1_sig_polarity", c_uint8, 1),  # bit 3
+        ("lim2_sig_polarity", c_uint8, 1),  # bit 4
+        ("home_sig_polarity", c_uint8, 1),  # bit 5
+        ("reserved", c_uint8, 2),           # bits 6-7
+    ]
 
-@dcs.dataclass(dcs.LITTLE_ENDIAN)
-class Settings:
-    # motor
-    step_current: dcs.U8
-    sleep_current: dcs.U8
-    microstep_resolution: dcs.U8
-    sleep_timeout: dcs.U8
-    # trajectory
-    top_speed: dcs.U32
-    acceleration: dcs.U32
-    # lims
-    enable_lim1: dcs.Bool
-    enable_lim2: dcs.Bool
-    enable_home: dcs.Bool
-    lim1_sig_polarity: dcs.Bool
-    lim2_sig_polarity: dcs.Bool
-    home_sig_polarity: dcs.Bool
+class SettingsStruct(Structure):
+    """Maps to Settings_struct in C++"""
+    _pack_ = 1  # Match __attribute__((packed))
+    _fields_ = [
+        ("step_current", c_uint8, 4),      # max 0b1111
+        ("sleep_current", c_uint8, 4),     # max 0b1111
+        ("microstep_res", c_uint8, 4),     # max 0b1111
+        ("reserved", c_uint8, 4),       # padding for algiment
+        ("sleep_timeout", c_uint8),     # 10s of ms
+        ("top_speed", c_uint32),        # 32 bits
+        ("acceleration", c_uint32),      # 32 bits
+        ("flags", SettingsFlags)        # bitfield struct
+    ]
 
+class Settings(Union):
+    """Maps to Settings_union in C++"""
+    _pack_ = 1
+    _fields_ = [
+        ("data", SettingsStruct),
+        ("bytes", c_uint8 * sizeof(SettingsStruct))
+    ]
 
 class VMSTEP:
     VMSTEP_SERIAL_KWARGS: Mapping = MappingProxyType(
@@ -254,11 +269,16 @@ class VMSTEP:
         self.send_command(Cmd.DISABLE)
 
     def get_parameters(self):
+        """Get current device settings"""
         reply = self.query(Query.PARAMETERS)
-        return Settings.from_packed(reply)
+        settings = Settings()
+        for i, b in enumerate(reply):
+            settings.bytes[i] = b
+        return settings
 
     def set_parameters(self, settings: Settings):
-        results = self.send_command(Cmd.UPDATE_PARAMETERS, settings.pack())
+        """Send new settings to device"""
+        results = self.send_command(Cmd.UPDATE_PARAMETERS, bytes(settings.bytes))
         return results
 
     def goto(self, distance: int, timeout_s: float = 10.0):
@@ -353,20 +373,15 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     logger.info("Start")
 
-    settings = Settings(
-        step_current=1,
-        sleep_current=0,
-        microstep_resolution=7,
-        sleep_timeout=100,
-        top_speed=40000,
-        acceleration=200000,
-        enable_lim1=False,
-        enable_lim2=False,
-        enable_home=True,
-        lim1_sig_polarity=False,
-        lim2_sig_polarity=False,
-        home_sig_polarity=False,
-    )
+    settings = Settings()
+    settings.data.step_current = 1
+    settings.data.sleep_current = 0
+    settings.data.microstep_res = 7
+    settings.data.sleep_timeout = 100
+    settings.data.top_speed = 40000
+    settings.data.acceleration = 200000
+    settings.data.flags.enable_home = False
+    settings.data.flags.home_sig_polarity = False
 
     with VMSTEP.discover() as mc:
         status = mc.set_parameters(settings)
@@ -397,9 +412,10 @@ if __name__ == "__main__":
         # print(f"\nFault details: \n{error_msg}")
 
         # Homing ##########################
-        mc.enable()
-        settings.top_speed = 10000
+        settings.data.flags.enable_home = True
+        settings.data.top_speed = 10000
         mc.set_parameters(settings)
+        mc.enable()
         mc.home(False)
         status = mc.goto(-830)
         print("Reply: ", status)
