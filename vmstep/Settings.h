@@ -3,17 +3,12 @@
 
 #include <Arduino.h>
 
-struct SettingLimits {
-    static constexpr uint8_t MAX_CURRENT = 0b1111;        // 4 bits
-    static constexpr uint8_t MAX_MICROSTEP_RES = 0b1111;  // 4 bits
-};
-
 struct __attribute__((packed)) Settings_struct {
     //motor control (4 bits each)
     uint8_t step_current: 4;      // max 0b1111
     uint8_t sleep_current: 4;     // max 0b1111
     uint8_t microstep_res: 4;     // max 0b1111
-    uint8_t reserved: 4;     // padding for algiment
+    uint8_t reserved: 4;     // padding for alignment
     uint8_t sleep_timeout;         // 10s of ms
     
     //trajectory (32 bits each)

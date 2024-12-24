@@ -54,24 +54,52 @@ static constexpr char FAULT_HOME = 'H';
 
 void init_serial();
 
+typedef void (*SerialHandlerCallback)(byte[] msg, size_t size);
+
 class SerialTransciever {
   public:
-    static constexpr byte buffer_size = 32;
-    byte recv_data[buffer_size];
-    boolean recv_in_progress;
-    boolean new_data = false;
-    size_t data_length;
-    SerialTransciever();
+    static constexpr size_t BUFFER_SIZE = 32u;
+
     void send(byte reply_code, byte msg[], size_t length);
     void send(byte reply_code, byte data);
     void send(byte reply_code, String msg);
     void send(byte reply_code);
-    void recieve();
-    void run();
+
+    // Call every main loop
+    //
+    // The given callback is executed when a whole message has been received. Accepts callbacks of the form:
+    //     (byte[] msg, size_t size)
+    // The contents of "msg" is ONLY VALID DURING THE CALLBACK. Consider it invalid after returning
+    // The callback will not be run if there is no message pending.
+    void run(SerialHandlerCallback callback);
 
   private:
-    byte cursor;
-    byte incoming_byte;
+    // Only valid when;
+    //   receiver_state == MSG_PENDING
+    //   data_length > 0
+    byte data[BUFFER_SIZE] = {};
+    size_t data_size = 0;
+
+    // Simple state machine for handling the start/end tokens in the serial stream.
+    enum class ReceiverState : uint8_t {
+        // The "data" buffer should be considered invalid/incomplete in these states.
+        MSG_WAITING = 0,  // data is empty and we're waiting for a start marker
+        //  v
+        // run() transitions from MSG_WAITING to MSG_READING upon receiving a start marker
+        //  v
+        MSG_READING,
+        //  v
+        // run() transitions from MSG_READING to MSG_PENDING upon receiving an end marker
+        // run() transitions from MSG_READING to MSG_WAITING if a fault occurs
+        //  v
+        MSG_PENDING  // Indicates that a new, complete message is pending for consumption in the "data" buffer.
+        //  v
+        // run() transitions from MSG_PENDING back to MSG_WAITING
+    };
+    int receiver_state = ReceiverState::MSG_WAITING;
+
+    // Attempts to receive a single message from serial, and noops until the read message is no longer pending.
+    void recieve();
     void reset();
 };
 

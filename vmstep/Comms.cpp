@@ -5,80 +5,86 @@ void init_serial() {
     Serial.clear();  //Teensy only
 }
 
-SerialTransciever::SerialTransciever() {
-    reset();
-}
-
-void SerialTransciever::reset() {
-    recv_in_progress = false;
-    cursor = 0;
-}
-
 void SerialTransciever::send(byte reply_code, byte msg[], size_t length) {
     Serial.write(START_MARKER);
     Serial.write(reply_code);
-    Serial.write(msg, length);
+    if (length > 0 && msg != nullptr) {
+        // TODO: what happens if msg contains END_MARKER?
+        Serial.write(msg, length);
+    }
     Serial.write(END_MARKER);
 }
 
 void SerialTransciever::send(byte reply_code, byte data) {
-    Serial.write(START_MARKER);
-    Serial.write(reply_code);
-    Serial.write(data);
-    Serial.write(END_MARKER);
+    send(reply_code, &data, 1u);
 }
 
 void SerialTransciever::send(byte reply_code) {
-    Serial.write(START_MARKER);
-    Serial.write(reply_code);
-    Serial.write(END_MARKER);
+    send(reply_code, nullptr, 0u);
 }
 
 void SerialTransciever::send(byte reply_code, String msg) {
-    byte buffer[msg.length()];  // not null terminated
-    msg.getBytes(buffer, msg.length() + 1);
-    send(reply_code, buffer, sizeof(buffer));
+    // ignore null terminator
+    send(reply_code, msg.c_str(), msg.length());
 }
 
-
 void SerialTransciever::recieve() {
-    while (Serial.available() > 0 && new_data == false) {
-        incoming_byte = Serial.read();
-
-        if (recv_in_progress == true) {
-
-            // data done, roll it up!
-            if (incoming_byte == END_MARKER) {
-                // recv_data[cursor] = '\0';  // null terminate the string
-                new_data = true;
-                data_length = cursor;
-                reset();
-
-                // previous data fucked, start reading the new message
-            } else if (incoming_byte == START_MARKER) {
-                new_data = false;
-                cursor = 0;
-                Serial.println("You sent double start markers! bad!");
-
-                // normal data recieve
-            } else {
-                if (cursor + 1 >= buffer_size) {
-                    // too many chars
+    int incoming_byte = -1;
+    while ((receiver_state != ReceiverState::MSG_PENDING) &&
+           (incoming_byte = Serial.read()) != -1) {
+        // State maching handling start/end markers
+        switch (receiver_state) {
+            case ReceiverState::MSG_WAITING: {
+                if (incoming_byte == START_MARKER) {
+                    receiver_state = ReceiverState::MSG_READING;
+                } else {
+                    // Anything else is a fault, or eating characters to recover from a fault
+                    // (to reach the next message in the stream).
                     reset();
-                    new_data = false;
-                    Serial.println("Too many characters bro!");
-                    break;
                 }
-                recv_data[cursor] = incoming_byte;
-                cursor++;
+                break;
             }
-        } else if (incoming_byte == START_MARKER) {
-            recv_in_progress = true;
+            case ReceiverState::MSG_READING: {
+                if (incoming_byte == START_MARKER) {
+                    Serial.println("You sent double start markers! bad!");
+                    reset();
+                } else if (incoming_byte == END_MARKER) {
+                    // data done, allow it to be consumed by the user
+                    if (data_size == 0) {
+                        // No payload received. Go back to the WAITING state
+                        Serial.println("Received empty message payload!");
+                        reset();
+                    } else {
+                        // Have a payload. Mark it as pending user consumption
+                        receiver_state = ReceiverState::MSG_PENDING;
+                    }
+                } else if (data_size + 1 >= BUFFER_SIZE) {
+                    // too many chars
+                    Serial.println("Too many characters bro!");
+                    reset();
+                } else {
+                    // copy bytes into the data buffer
+                    data[data_size] = incoming_byte;
+                    data_size++;
+                }
+                break;
+            }
+            case ReceiverState::MSG_PENDING: {
+                break;  // This function does nothing when in the pending state (handled in loop above)
+            }
         }
-        // no start marker and not in progress
     }
 }
 
-void SerialTransciever::run() {
+void SerialTransciever::reset() {
+    data_size = 0;
+    receiver_state = ReceiverState::MSG_WAITING;
+}
+
+void SerialTransciever::run(SerialHandlerCallback callback) {
     recieve();
+    if (receiver_state == ReceiverState::MSG_PENDING) {
+        callback(data, data_size);
+        reset();
+    }
 }
