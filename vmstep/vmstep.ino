@@ -379,11 +379,7 @@ void homing() {
 }
 
 void loop() {
-    Comms.run();
-    if (Comms.new_data) {
-        process_message(Comms.recv_data, Comms.data_length);
-        Comms.new_data = false;
-    }
+    Comms.run(process_message);
 
     check_sensors();
 

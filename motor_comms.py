@@ -4,6 +4,7 @@ import logging
 import struct
 import time
 from collections.abc import Mapping
+from ctypes import Structure, Union, c_uint8, c_uint32, sizeof
 from enum import Enum
 from types import MappingProxyType, TracebackType
 from typing import Optional, Type
@@ -11,8 +12,6 @@ from typing import Optional, Type
 import serial
 from serial import SerialException
 from serial.tools.list_ports import comports
-
-from ctypes import Structure, c_uint8, c_uint32, Union, sizeof
 
 logger = logging.getLogger(__name__)
 
@@ -104,39 +103,43 @@ class Fault(Enum):
     LIMT2 = b"K"
     HOME = b"H"
 
+
 class SettingsFlags(Structure):
     """Maps to the flags bitfield struct in Settings_struct"""
+
     _fields_ = [
-        ("enable_lim1", c_uint8, 1),        # bit 0
-        ("enable_lim2", c_uint8, 1),        # bit 1
-        ("enable_home", c_uint8, 1),        # bit 2
+        ("enable_lim1", c_uint8, 1),  # bit 0
+        ("enable_lim2", c_uint8, 1),  # bit 1
+        ("enable_home", c_uint8, 1),  # bit 2
         ("lim1_sig_polarity", c_uint8, 1),  # bit 3
         ("lim2_sig_polarity", c_uint8, 1),  # bit 4
         ("home_sig_polarity", c_uint8, 1),  # bit 5
-        ("reserved", c_uint8, 2),           # bits 6-7
+        ("reserved", c_uint8, 2),  # bits 6-7
     ]
+
 
 class SettingsStruct(Structure):
     """Maps to Settings_struct in C++"""
+
     _pack_ = 1  # Match __attribute__((packed))
     _fields_ = [
-        ("step_current", c_uint8, 4),      # max 0b1111
-        ("sleep_current", c_uint8, 4),     # max 0b1111
-        ("microstep_res", c_uint8, 4),     # max 0b1111
-        ("reserved", c_uint8, 4),       # padding for algiment
-        ("sleep_timeout", c_uint8),     # 10s of ms
-        ("top_speed", c_uint32),        # 32 bits
-        ("acceleration", c_uint32),      # 32 bits
-        ("flags", SettingsFlags)        # bitfield struct
+        ("step_current", c_uint8, 4),  # max 0b1111
+        ("sleep_current", c_uint8, 4),  # max 0b1111
+        ("microstep_res", c_uint8, 4),  # max 0b1111
+        ("reserved", c_uint8, 4),  # padding for algiment
+        ("sleep_timeout", c_uint8),  # 10s of ms
+        ("top_speed", c_uint32),  # 32 bits
+        ("acceleration", c_uint32),  # 32 bits
+        ("flags", SettingsFlags),  # bitfield struct
     ]
+
 
 class Settings(Union):
     """Maps to Settings_union in C++"""
+
     _pack_ = 1
-    _fields_ = [
-        ("data", SettingsStruct),
-        ("bytes", c_uint8 * sizeof(SettingsStruct))
-    ]
+    _fields_ = [("data", SettingsStruct), ("bytes", c_uint8 * sizeof(SettingsStruct))]
+
 
 class VMSTEP:
     VMSTEP_SERIAL_KWARGS: Mapping = MappingProxyType(
