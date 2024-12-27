@@ -104,6 +104,20 @@ class Fault(Enum):
     HOME = b"H"
 
 
+class Microsteps(Enum):
+    MicroStep1_100 = 0b0000
+    MicroStep1 = 0b0001
+    MicroStep2_NC = 0b0010
+    MicroStep2 = 0b0011
+    MicroStep4 = 0b0100
+    MicroStep8 = 0b0101
+    MicroStep16 = 0b0110
+    MicroStep32 = 0b0111
+    MicroStep64 = 0b1000
+    MicroStep128 = 0b1001
+    MicroStep256 = 0b1010
+
+
 class SettingsFlags(Structure):
     """Maps to the flags bitfield struct in Settings_struct"""
 
@@ -123,7 +137,7 @@ class SettingsStruct(Structure):
 
     _pack_ = 1  # Match __attribute__((packed))
     _fields_ = [
-        ("step_current", c_uint8, 4),  # max 0b1111
+        ("run_current", c_uint8, 4),  # max 0b1111
         ("sleep_current", c_uint8, 4),  # max 0b1111
         ("microstep_res", c_uint8, 4),  # max 0b1111
         ("reserved", c_uint8, 4),  # padding for algiment
@@ -139,6 +153,28 @@ class Settings(Union):
 
     _pack_ = 1
     _fields_ = [("data", SettingsStruct), ("bytes", c_uint8 * sizeof(SettingsStruct))]
+
+    def __str__(self) -> str:
+        """Return human-readable settings string"""
+        flags = self.data.flags
+        return (
+            f"\nMotor Settings:\n"
+            f"-------------\n"
+            f"Step Current     : {self.data.run_current}/15\n"
+            f"Sleep Current    : {self.data.sleep_current}/15\n"
+            f"Microstep Res    : {Microsteps(self.data.microstep_res).name}\n"
+            f"Sleep Timeout    : {self.data.sleep_timeout*10}ms\n"
+            f"Maximum Speed    : {self.data.top_speed} steps/s\n"
+            f"Acceleration     : {self.data.acceleration} steps/s²\n"
+            f"\nLimit Switches:\n"
+            f"-------------\n"
+            f"Limit 1    : {'Enabled' if flags.enable_lim1 else 'Disabled'} "
+            f"({'Active-High' if flags.lim1_sig_polarity else 'Active-Low'})\n"
+            f"Limit 2    : {'Enabled' if flags.enable_lim2 else 'Disabled'} "
+            f"({'Active-High' if flags.lim2_sig_polarity else 'Active-Low'})\n"
+            f"Home       : {'Enabled' if flags.enable_home else 'Disabled'} "
+            f"({'Active-High' if flags.home_sig_polarity else 'Active-Low'})"
+        )
 
 
 class VMSTEP:
@@ -377,18 +413,18 @@ if __name__ == "__main__":
     logger.info("Start")
 
     settings = Settings()
-    settings.data.step_current = 1
+    settings.data.run_current = 0
     settings.data.sleep_current = 0
-    settings.data.microstep_res = 7
+    settings.data.microstep_res = 6
     settings.data.sleep_timeout = 100
-    settings.data.top_speed = 40000
-    settings.data.acceleration = 200000
+    settings.data.top_speed = 20000
+    settings.data.acceleration = 40000
     settings.data.flags.enable_home = False
     settings.data.flags.home_sig_polarity = False
 
     with VMSTEP.discover() as mc:
         status = mc.set_parameters(settings)
-        print("Reply: ", status)
+        # print("Reply: ", status)
 
         # Query ###########################
         # echo = mc.echo()
@@ -396,13 +432,13 @@ if __name__ == "__main__":
         # model = mc.query(Query.MODEL_NO)
         # firm = mc.query(Query.FIRMWARE)
         # position = mc.get_position()
-        # parms = mc.get_parameters()
+        parms = mc.get_parameters()
         # print(f"Echo: {echo}")
         # print(f"Serial: {serial}")
         # print(f"Model: {model}")
         # print(f"Firmware: {firm}")
         # print(f"Position: {position}")
-        # print(f"Parameters: {parms}")
+        print(f"Parameters: {parms}")
 
         # # Get fault registers
         # fault_reg, diag1_reg, diag2_reg = mc.get_fault_registers()
@@ -419,8 +455,8 @@ if __name__ == "__main__":
         settings.data.top_speed = 10000
         mc.set_parameters(settings)
         mc.enable()
-        mc.home(False)
+        mc.home(False, timeout_s=100)
         status = mc.goto(-830)
         print("Reply: ", status)
-        mc.reset_position()
+        # mc.reset_position()
         mc.disable()

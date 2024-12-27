@@ -9,14 +9,6 @@
 
 class Motor {
   public:
-    const uint8_t PIN_CS;
-    const uint8_t PIN_STEP;
-    const uint8_t PIN_DIR;
-    const uint8_t PIN_ENABLE;
-    const uint8_t PIN_SLEEP;
-    bool driver_enabled = false;
-    Settings_union* settings;
-    byte fault_registers[3];  // [fault_reg, diag1_reg, diag2_reg]
     Motor(uint8_t pin_cs, uint8_t pin_step, uint8_t pin_dir, uint8_t pin_enable, uint8_t pin_sleep, Settings_union& settings);
     void goto_pos(long steps);
     long position();
@@ -32,11 +24,18 @@ class Motor {
     long steps_remaining();
     void reset_position();
     bool try_verify_settings();
-    byte* get_fault_registers();
+    const std::array<byte, 3>& get_fault_registers();
 
   private:
+    const uint8_t PIN_CS;
+    const uint8_t PIN_STEP;
+    const uint8_t PIN_DIR;
+    const uint8_t PIN_ENABLE;
+    const uint8_t PIN_SLEEP;
+    Settings_union* settings;
     AccelStepper stepper;
     DRV8434S driver;
+    std::array<byte, 3> fault_registers;  // [fault_reg, diag1_reg, diag2_reg]
 };
 
 #endif

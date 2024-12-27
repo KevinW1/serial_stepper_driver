@@ -22,42 +22,24 @@ static constexpr byte PIN_HOME = 14;
 // system control
 static constexpr uint16_t LED_PULSE_PERIOD = 2000;  // 2 second cycle
 
-Settings_union settings = {
-    .data = {
-        .step_current = 0b0000,      // run current (min)
-        .sleep_current = 0b0000,     // sleep current (min)
-        .microstep_res = 0b0111,     // microstep res (1/32nd)
-        .sleep_timeout = 0x64,       // sleep timeout 1000ms
-        .top_speed = 0x07D0,         // top speed 2000
-        .acceleration = 0x0FA0,       // acceleration 4,000
-        .flags = {                   // limit switch flags
-            .enable_lim1 = 0,        // bit 0
-            .enable_lim2 = 0,        // bit 1
-            .enable_home = 0,        // bit 2
-            .lim1_sig_polarity = 0,  // bit 3
-            .lim2_sig_polarity = 0,  // bit 4
-            .home_sig_polarity = 0,  // bit 5
-            .reserved = 0            // bits 6-7
-        }
-    }
-};
 
 enum class Mode {
-    idle,   // waiting for commands, full current
-    sleep,  // waiting for commands, low current
-    moving, // moving to a position
-    homing, // moving, waiting for home sensor
-    fault   // Stop all operations
+    idle,    // waiting for commands, full current
+    sleep,   // waiting for commands, low current
+    moving,  // moving to a position
+    homing,  // moving, waiting for home sensor
+    fault    // Stop all operations
 };
 Mode device_mode = Mode::idle;
 
-unsigned long idle_time = 0; // time controler entered idle state
+unsigned long idle_time = 0;  // time controler entered idle state
 
 union {
     long value;
     uint8_t bytes[4];
 } position;
 
+Settings_union settings;
 SerialTransciever Comms;
 Motor motor(PIN_SCS, PIN_STEP, PIN_DIR, PIN_ENABLE, PIN_SLEEP, settings);
 
@@ -92,7 +74,7 @@ void reset_controller() {
         Comms.send(REPLY_FAULT, FAULT_DRIVER_SYNC);
         return;
     }
-    
+
     enter_idle_state();
     Comms.send(REPLY_ACK);
 }
@@ -116,7 +98,7 @@ void enter_sleep_state() {
 void enter_moving_state() {
     device_mode = Mode::moving;
     // apply run current to motor
-    motor.set_current(settings.data.step_current);
+    motor.set_current(settings.data.run_current);
     analogWrite(PIN_LED_G, 255);
     analogWrite(PIN_LED_R, 0);
 }
@@ -124,7 +106,7 @@ void enter_moving_state() {
 void enter_homing_state() {
     device_mode = Mode::homing;
     // apply run current to motor
-    motor.set_current(settings.data.step_current);
+    motor.set_current(settings.data.run_current);
     analogWrite(PIN_LED_G, 128);
     analogWrite(PIN_LED_R, 128);
 }
@@ -164,7 +146,7 @@ void motor_home(byte data[]) {
 
 void motor_stop() {
     motor.stop();
-    enter_moving_state(); //decel
+    enter_moving_state();  //decel
     Comms.send(REPLY_ACK);
 }
 
@@ -229,46 +211,62 @@ void update_parameters(byte data[], size_t length) {
 void controller_query(byte data[]) {
     byte query_type = data[1];
     switch (query_type) {
-        case QUERY_MODEL_NO: {
-            // Create static array from macro
-            static const char product[] = PRODUCT_NAME;
-            char model[PRODUCT_NAME_LEN + 1];  // +1 for null terminator
-            memcpy(model, product, PRODUCT_NAME_LEN);
-            model[PRODUCT_NAME_LEN] = '\0';
-            Comms.send(REPLY_ACK, model);
-            break;
-        }
-        case QUERY_SERIAL_NO: {
-            // Create static array from macro
-            static const char serial_num[] = SERIAL_NUMBER;
-            char serial[SERIAL_NUMBER_LEN + 1];  // +1 for null terminator
-            memcpy(serial, serial_num, SERIAL_NUMBER_LEN);
-            serial[SERIAL_NUMBER_LEN] = '\0';
-            Comms.send(REPLY_ACK, serial);
-            break;
-        }
+        case QUERY_MODEL_NO:
+            {
+                // Create static array from macro
+                static const char product[] = PRODUCT_NAME;
+                char model[PRODUCT_NAME_LEN + 1];  // +1 for null terminator
+                memcpy(model, product, PRODUCT_NAME_LEN);
+                model[PRODUCT_NAME_LEN] = '\0';
+                Comms.send(REPLY_ACK, model);
+                break;
+            }
+        case QUERY_SERIAL_NO:
+            {
+                // Create static array from macro
+                static const char serial_num[] = SERIAL_NUMBER;
+                char serial[SERIAL_NUMBER_LEN + 1];  // +1 for null terminator
+                memcpy(serial, serial_num, SERIAL_NUMBER_LEN);
+                serial[SERIAL_NUMBER_LEN] = '\0';
+                Comms.send(REPLY_ACK, serial);
+                break;
+            }
         case QUERY_FIRMWARE: Comms.send(REPLY_ACK, "Firmware: 0.0.1"); break;
         case QUERY_PARAMETERS:
             Comms.send(REPLY_ACK, settings.bytes, sizeof(settings.bytes));
             break;
-        case QUERY_POSITION: {
-            position.value = motor.position(); // Update position from motor
-            Comms.send(REPLY_ACK, position.bytes, sizeof(position.bytes));
-            break;
-        }
-        case QUERY_MODE: {
-            byte mode = static_cast<byte>(device_mode);
-            Comms.send(REPLY_ACK, &mode, 1);
-            break;
-        }
-        case QUERY_FAULT_REGS: {
-            byte* fault_registers = motor.get_fault_registers();
-            Comms.send(REPLY_ACK, fault_registers, 3);  // Send all 3 registers
-            break;
-        }
-        
+        case QUERY_POSITION:
+            {
+                position.value = motor.position();  // Update position from motor
+                Comms.send(REPLY_ACK, position.bytes, sizeof(position.bytes));
+                break;
+            }
+        case QUERY_MODE:
+            {
+                byte mode = static_cast<byte>(device_mode);
+                Comms.send(REPLY_ACK, &mode, 1);
+                break;
+            }
+        case QUERY_FAULT_REGS:
+            {
+                const std::array<byte, 3>& fault_registers = motor.get_fault_registers();
+                Comms.send(REPLY_ACK, fault_registers.data(), 3);  // Send all 3 registers
+                break;
+            }
+
         default:
             Comms.send(REPLY_FAULT, FAULT_NACK);
+    }
+}
+
+bool fault_allowed_command(byte cmd) {
+    switch (cmd) {
+        case CMD_RESET: [[fallthrough]];
+        case CMD_QUERY: [[fallthrough]];
+        case CMD_ECHO:
+            return true;
+        default:
+            return false;
     }
 }
 
@@ -276,18 +274,9 @@ void process_message(byte data[], size_t length) {
     byte cmd = data[0];
 
     // Check if command allowed in fault state
-    if (device_mode == Mode::fault) {
-        bool allowed = false;
-        for (byte allowed_cmd : FAULT_ALLOWED_CMDS) {
-            if (cmd == allowed_cmd) {
-                allowed = true;
-                break;
-            }
-        }
-        if (!allowed) {
-            Comms.send(REPLY_FAULT, FAULT_NACK);
-            return;
-        }
+    if (device_mode == Mode::fault && !fault_allowed_command(cmd)) {
+        Comms.send(REPLY_FAULT, FAULT_NACK);
+        return;
     }
 
     switch (cmd) {
@@ -311,9 +300,10 @@ void check_sensors() {
     if (digitalRead(PIN_FAULT) == LOW && device_mode != Mode::fault) {
         // Create fault report array: [FAULT_DRIVER, fault_reg, diag1_reg, diag2_reg]
         byte fault_data[4] = { FAULT_DRIVER };
-        byte* fault_registers = motor.get_fault_registers();
-        memcpy(fault_data + 1, fault_registers, 3);
-        
+
+        const std::array<byte, 3>& fault_registers = motor.get_fault_registers();
+        memcpy(fault_data + 1, fault_registers.data(), 3);
+
         enter_fault_state();
         Comms.send(REPLY_FAULT, fault_data, sizeof(fault_data));
         return;

@@ -33,18 +33,16 @@ void Motor::init() {
     driver.resetSettings();
     set_current(0b0000);  // min
     driver.clearFaults();
-    driver.enableDriver();  // digital enable.
-    disable_driver();   // physical disable.
+    driver.enableDriver();  // digital enable via SPI.
+    disable_driver();   // physical disable via pin low.
 }
 
 void Motor::enable_driver() {
     digitalWrite(PIN_ENABLE, HIGH);
-    driver_enabled = true;
 }
 
 void Motor::disable_driver() {
     digitalWrite(PIN_ENABLE, LOW);
-    driver_enabled = false;
 }
 
 bool Motor::try_verify_settings() {
@@ -63,7 +61,7 @@ bool Motor::update_settings() {
     stepper.setMaxSpeed(settings->data.top_speed);
     stepper.setAcceleration(settings->data.acceleration);
     // driver update
-    driver.setStepMode(settings->data.microstep_res);
+    driver.setStepMode(static_cast<DRV8434SStepMode>(settings->data.microstep_res));
     return try_verify_settings();
 }
 
@@ -106,7 +104,7 @@ long Motor::steps_remaining() {
     return stepper.distanceToGo();
 }
 
-byte* Motor::get_fault_registers() {
+const std::array<byte, 3>& Motor::get_fault_registers() {
     fault_registers[0] = driver.readFault();
     fault_registers[1] = driver.readDiag1();
     fault_registers[2] = driver.readDiag2();
