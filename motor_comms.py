@@ -3,14 +3,12 @@ from __future__ import annotations
 import logging
 import struct
 import time
-from collections.abc import Mapping
 from ctypes import Structure, Union, c_uint8, c_uint32, sizeof
 from enum import Enum
-from types import MappingProxyType, TracebackType
+from types import TracebackType
 from typing import Optional, Type
 
 import serial
-from serial import SerialException
 from serial.tools.list_ports import comports
 
 logger = logging.getLogger(__name__)
@@ -137,13 +135,13 @@ class SettingsStruct(Structure):
 
     _pack_ = 1  # Match __attribute__((packed))
     _fields_ = [
-        ("run_current", c_uint8, 4),  # max 0b1111
-        ("sleep_current", c_uint8, 4),  # max 0b1111
-        ("microstep_res", c_uint8, 4),  # max 0b1111
+        ("run_current", c_uint8, 4),
+        ("sleep_current", c_uint8, 4),
+        ("microstep_res", c_uint8, 4),
         ("reserved", c_uint8, 4),  # padding for algiment
         ("sleep_timeout", c_uint8),  # 10s of ms
-        ("top_speed", c_uint32),  # 32 bits
-        ("acceleration", c_uint32),  # 32 bits
+        ("top_speed", c_uint32),
+        ("acceleration", c_uint32),
         ("flags", SettingsFlags),  # bitfield struct
     ]
 
@@ -178,18 +176,16 @@ class Settings(Union):
 
 
 class VMSTEP:
-    VMSTEP_SERIAL_KWARGS: Mapping = MappingProxyType(
-        {
-            "baudrate": 19200,
-            "parity": serial.PARITY_NONE,
-            "stopbits": serial.STOPBITS_ONE,
-            "bytesize": serial.EIGHTBITS,
-            "timeout": 0.5,
-        }
-    )
+    VMSTEP_SERIAL_KWARGS = {
+        "baudrate": 19200,
+        "parity": serial.PARITY_NONE,
+        "stopbits": serial.STOPBITS_ONE,
+        "bytesize": serial.EIGHTBITS,
+        "timeout": 0.5,
+    }
 
     @classmethod
-    def discover(self, serial_number=None) -> "VMSTEP":
+    def discover(self, serial_number: Optional[str] = None) -> "VMSTEP":
         """Attempt automatic discovery of the VMSTEP serial port
         and return the VMSTEP object.
 
@@ -207,7 +203,7 @@ class VMSTEP:
         port_list = comports()
 
         if len(port_list) == 0:
-            raise SerialException("No serial ports found on this machine")
+            raise serial.SerialException("No serial ports found on this machine")
 
         for p in port_list:
             if p.manufacturer != MANUFACTURER and p.product != PRODUCT:
@@ -225,14 +221,14 @@ class VMSTEP:
                 Check connection and power."""
         )
 
-    def __init__(self, serial_port=None):
+    def __init__(self, serial_port: str | serial.Serial = None):
         self.logger = logging.getLogger(__name__)
         if isinstance(serial_port, str):
             self._port = serial.Serial(serial_port, **self.VMSTEP_SERIAL_KWARGS)
         else:
             self._port = serial_port
 
-    def __enter__(self) -> Self:
+    def __enter__(self) -> "VMSTEP":
         self.open()
         return self
 
@@ -241,28 +237,27 @@ class VMSTEP:
         exc_type: Optional[Type[BaseException]],
         exc_val: Optional[BaseException],
         exc_tb: Optional[TracebackType],
-    ) -> bool:
+    ) -> None:
         self.close()
-        return False
 
-    def _clear_buffer(self):
+    def _clear_buffer(self) -> None:
         self._port.read_all()
 
-    def open(self):
+    def open(self) -> None:
         if isinstance(self._port, str):
             self._port = serial.Serial(self._port, **self.VMSTEP_SERIAL_KWARGS)
         self._clear_buffer()
 
-    def close(self):
+    def close(self) -> None:
         self._port.close()
 
-    def receive(self):
+    def receive(self) -> bytes:
         data = self._port.read_until(LINE_END)
         if not (data.startswith(LINE_BEGIN) and data.endswith(LINE_END)):
-            raise SerialException(f"Invalid response: {data}")
+            raise serial.SerialException(f"Invalid response: {data}")
         return data[1:-1]  # strip line begin/end bytes
 
-    def parse_reply(self, data: bytes):
+    def parse_reply(self, data: bytes) -> bytes:
         reply_code = Reply(data[0:1])  # extract reply code
 
         if reply_code == Reply.ACK:
@@ -279,8 +274,10 @@ class VMSTEP:
                 raise RuntimeError(f"Driver Fault:\n{error_msg}")
             else:
                 raise RuntimeError(f"Device fault: {fault}")
+        else:
+            raise RuntimeError(f"Unhandled reply code: {reply_code}")
 
-    def send_command(self, command: Cmd, arg_bytes: bytes = None):
+    def send_command(self, command: Cmd, arg_bytes: Optional[bytes] = None) -> bytes:
         self.logger.debug(f"Sending: {command.name}")
         message = LINE_BEGIN
         message += command.value
@@ -290,24 +287,24 @@ class VMSTEP:
         self._port.write(message)
         return self.parse_reply(self.receive())
 
-    def reset(self):
+    def reset(self) -> None:
         self.send_command(Cmd.RESET)
 
-    def echo(self):
+    def echo(self) -> bytes:
         results = self.send_command(Cmd.ECHO)
         return results
 
-    def query(self, query: Query):
+    def query(self, query: Query) -> bytes:
         results = self.send_command(Cmd.QUERY, query.value)
         return results
 
-    def enable(self):
+    def enable(self) -> None:
         self.send_command(Cmd.ENABLE)
 
-    def disable(self):
+    def disable(self) -> None:
         self.send_command(Cmd.DISABLE)
 
-    def get_parameters(self):
+    def get_parameters(self) -> Settings:
         """Get current device settings"""
         reply = self.query(Query.PARAMETERS)
         settings = Settings()
@@ -315,18 +312,18 @@ class VMSTEP:
             settings.bytes[i] = b
         return settings
 
-    def set_parameters(self, settings: Settings):
+    def set_parameters(self, settings: Settings) -> bytes:
         """Send new settings to device"""
         results = self.send_command(Cmd.UPDATE_PARAMETERS, bytes(settings.bytes))
         return results
 
-    def goto(self, distance: int, timeout_s: float = 10.0):
-        distance = distance.to_bytes(length=4, byteorder="little", signed=True)
-        self.send_command(Cmd.GOTO, distance)
+    def goto(self, distance: int, timeout_s: float = 10.0) -> int:
+        distance_bytes = distance.to_bytes(length=4, byteorder="little", signed=True)
+        self.send_command(Cmd.GOTO, distance_bytes)
         reply = self.wait_for_done(timeout_s)
         return struct.unpack("<l", reply[1:])[0]
 
-    def wait_for_done(self, timeout_s: float = 10.0):
+    def wait_for_done(self, timeout_s: float = 10.0) -> bytes:
         start_time = time.time()
         while True:
             if time.time() - start_time > timeout_s:
@@ -336,18 +333,18 @@ class VMSTEP:
                 reply_code = Reply(data[0:1])
                 if reply_code == Reply.DONE:
                     return data
-            except (SerialException, ValueError, OSError):
+            except (serial.SerialException, ValueError, OSError):
                 # Brief pause before retry
                 time.sleep(0.1)
                 continue
 
-    def stop(self, timeout_s=10):
+    def stop(self, timeout_s=10) -> None:
         self.send_command(Cmd.STOP)
         self.wait_for_done(timeout_s)
 
-    def home(self, direction: bool, timeout_s=10):
-        direction = direction.to_bytes(length=1, byteorder="little")
-        self.send_command(Cmd.HOME, direction)
+    def home(self, direction: bool, timeout_s=10) -> None:
+        direction_bytes = direction.to_bytes(length=1, byteorder="little")
+        self.send_command(Cmd.HOME, direction_bytes)
         self.wait_for_done(timeout_s)
 
     def get_position(self) -> int:
@@ -364,7 +361,7 @@ class VMSTEP:
         reply = self.query(Query.MODE)
         return DeviceMode(reply[0])
 
-    def reset_position(self):
+    def reset_position(self) -> None:
         """Reset the current position to zero"""
         self.send_command(Cmd.RESET_POSITION)
 
@@ -424,7 +421,7 @@ if __name__ == "__main__":
 
     with VMSTEP.discover() as mc:
         status = mc.set_parameters(settings)
-        # print("Reply: ", status)
+        print("Reply: ", status)
 
         # Query ###########################
         # echo = mc.echo()
@@ -432,13 +429,13 @@ if __name__ == "__main__":
         # model = mc.query(Query.MODEL_NO)
         # firm = mc.query(Query.FIRMWARE)
         # position = mc.get_position()
-        parms = mc.get_parameters()
+        # parms = mc.get_parameters()
         # print(f"Echo: {echo}")
         # print(f"Serial: {serial}")
         # print(f"Model: {model}")
         # print(f"Firmware: {firm}")
         # print(f"Position: {position}")
-        print(f"Parameters: {parms}")
+        # print(f"Parameters: {parms}")
 
         # # Get fault registers
         # fault_reg, diag1_reg, diag2_reg = mc.get_fault_registers()
@@ -454,9 +451,10 @@ if __name__ == "__main__":
         settings.data.flags.enable_home = True
         settings.data.top_speed = 10000
         mc.set_parameters(settings)
+        print(f"Parameters: {mc.get_parameters()}")
         mc.enable()
         mc.home(False, timeout_s=100)
         status = mc.goto(-830)
         print("Reply: ", status)
-        # mc.reset_position()
+        mc.reset_position()
         mc.disable()
