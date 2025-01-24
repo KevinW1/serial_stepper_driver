@@ -424,20 +424,20 @@ if __name__ == "__main__":
         print("Reply: ", status)
 
         # Query ###########################
-        # echo = mc.echo()
-        # serial = mc.query(Query.SERIAL_NO)
-        # model = mc.query(Query.MODEL_NO)
-        # firm = mc.query(Query.FIRMWARE)
-        # position = mc.get_position()
-        # parms = mc.get_parameters()
-        # print(f"Echo: {echo}")
-        # print(f"Serial: {serial}")
-        # print(f"Model: {model}")
-        # print(f"Firmware: {firm}")
-        # print(f"Position: {position}")
-        # print(f"Parameters: {parms}")
+        echo = mc.echo()
+        serial = mc.query(Query.SERIAL_NO)
+        model = mc.query(Query.MODEL_NO)
+        firm = mc.query(Query.FIRMWARE)
+        position = mc.get_position()
+        parms = mc.get_parameters()
+        print(f"Echo: {echo}")
+        print(f"Serial: {serial}")
+        print(f"Model: {model}")
+        print(f"Firmware: {firm}")
+        print(f"Position: {position}")
+        print(f"Parameters: {parms}")
 
-        # # Get fault registers
+        # # Get fault registers`
         # fault_reg, diag1_reg, diag2_reg = mc.get_fault_registers()
         # print(f"Fault register: 0x{fault_reg:02x}")
         # print(f"DIAG1 register: 0x{diag1_reg:02x}")
@@ -448,13 +448,13 @@ if __name__ == "__main__":
         # print(f"\nFault details: \n{error_msg}")
 
         # Homing ##########################
-        settings.data.flags.enable_home = True
-        settings.data.top_speed = 10000
-        mc.set_parameters(settings)
-        print(f"Parameters: {mc.get_parameters()}")
-        mc.enable()
-        mc.home(False, timeout_s=100)
-        status = mc.goto(-830)
-        print("Reply: ", status)
-        mc.reset_position()
-        mc.disable()
+        # settings.data.flags.enable_home = True
+        # settings.data.top_speed = 10000
+        # mc.set_parameters(settings)
+        # print(f"Parameters: {mc.get_parameters()}")
+        # mc.enable()
+        # mc.home(False, timeout_s=100)
+        # status = mc.goto(-830)
+        # print("Reply: ", status)
+        # mc.reset_position()
+        # mc.disable()

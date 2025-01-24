@@ -213,25 +213,22 @@ void controller_query(byte data[]) {
     switch (query_type) {
         case QUERY_MODEL_NO:
             {
-                // Create static array from macro
                 static const char product[] = PRODUCT_NAME;
-                char model[PRODUCT_NAME_LEN + 1];  // +1 for null terminator
-                memcpy(model, product, PRODUCT_NAME_LEN);
-                model[PRODUCT_NAME_LEN] = '\0';
-                Comms.send(REPLY_ACK, model);
+                Comms.send(REPLY_ACK, (byte*)product, PRODUCT_NAME_LEN);
                 break;
             }
         case QUERY_SERIAL_NO:
             {
-                // Create static array from macro
                 static const char serial_num[] = SERIAL_NUMBER;
-                char serial[SERIAL_NUMBER_LEN + 1];  // +1 for null terminator
-                memcpy(serial, serial_num, SERIAL_NUMBER_LEN);
-                serial[SERIAL_NUMBER_LEN] = '\0';
-                Comms.send(REPLY_ACK, serial);
+                Comms.send(REPLY_ACK, (byte*)serial_num, SERIAL_NUMBER_LEN);
                 break;
             }
-        case QUERY_FIRMWARE: Comms.send(REPLY_ACK, "Firmware: 0.0.1"); break;
+        case QUERY_FIRMWARE:
+            {
+                static const char firmware_ver[] = FIRMWARE_VERSION;
+                Comms.send(REPLY_ACK, (byte*)firmware_ver, FIRMWARE_VERSION_LEN);
+                break;
+            }
         case QUERY_PARAMETERS:
             Comms.send(REPLY_ACK, settings.bytes, sizeof(settings.bytes));
             break;
