@@ -6,9 +6,9 @@
 
 // pin definitions
 // Motor
-static constexpr byte PIN_SLEEP = 6;
-static constexpr byte PIN_STEP = 7;
-static constexpr byte PIN_DIR = 8;
+static constexpr byte PIN_SLEEP = 14;  //6;
+static constexpr byte PIN_STEP = 15;   //7;
+static constexpr byte PIN_DIR = 16;    //8;
 static constexpr byte PIN_ENABLE = 9;
 static constexpr byte PIN_SCS = 10;
 static constexpr byte PIN_FAULT = 17;
@@ -16,9 +16,9 @@ static constexpr byte PIN_FAULT = 17;
 static constexpr byte PIN_LED_R = 4;
 static constexpr byte PIN_LED_G = 5;
 // Sensors
-static constexpr byte PIN_LIM1 = 16;
-static constexpr byte PIN_LIM2 = 15;
-static constexpr byte PIN_HOME = 14;
+static constexpr byte PIN_LIM1 = 23;  //16;
+static constexpr byte PIN_LIM2 = 22;  //15;
+static constexpr byte PIN_HOME = 21;  //14;
 // system control
 static constexpr uint16_t LED_PULSE_PERIOD = 2000;  // 2 second cycle
 
@@ -81,6 +81,7 @@ void reset_controller() {
 
 // State control functions
 void enter_idle_state() {
+    // if (device_mode == Mode::fault) return;
     device_mode = Mode::idle;
     idle_time = millis();
     analogWrite(PIN_LED_G, 128);
@@ -88,6 +89,7 @@ void enter_idle_state() {
 }
 
 void enter_sleep_state() {
+    // if (device_mode == Mode::fault) return;
     device_mode = Mode::sleep;
     // apply sleep current to motor
     motor.set_current(settings.data.sleep_current);
@@ -96,6 +98,7 @@ void enter_sleep_state() {
 }
 
 void enter_moving_state() {
+    // if (device_mode == Mode::fault) return;
     device_mode = Mode::moving;
     // apply run current to motor
     motor.set_current(settings.data.run_current);
@@ -104,6 +107,7 @@ void enter_moving_state() {
 }
 
 void enter_homing_state() {
+    // if (device_mode == Mode::fault) return;
     device_mode = Mode::homing;
     // apply run current to motor
     motor.set_current(settings.data.run_current);
