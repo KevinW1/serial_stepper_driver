@@ -1,0 +1,16 @@
+1 B1
+2 B2
+3 A2
+4 A1
+5 GND
+6 PWR (opto, hall sensor)
+7 Lim1
+8 Lim2
+9 Home
+
+
+
+gnd A1  A2  B1  B2
+5   4   3   2   1
+  6   7   8   9
+  3.3 L1  L2  Home
