@@ -142,6 +142,9 @@ void motor_home(byte data[]) {
     if (!data[1]) {
         homing_pos = -LONG_MAX;
     }
+    // Reset internal position so long_max doesn't overflow
+    motor.reset_position();
+    position.value = 0;  // Reset our position tracking
     motor.goto_pos(homing_pos);
     enter_homing_state();
     Comms.send(REPLY_ACK);

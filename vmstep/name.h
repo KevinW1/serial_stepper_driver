@@ -19,11 +19,11 @@
 
 // Serial number definition  
 #define SERIAL_NUMBER \
-    { '2', '0', '2', '4', '_', '0', '1', '.', '0', '2' }
+    { '2', '0', '2', '4', '_', '0', '1', '.', '0', '1' }
 #define SERIAL_NUMBER_LEN 10
 
 #define FIRMWARE_VERSION \
-    { '0', '0', '.', '0', '2' }
+    { '0', '0', '.', '0', '3' }
 #define FIRMWARE_VERSION_LEN 5
 
 #endif
